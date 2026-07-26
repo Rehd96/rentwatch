@@ -16,9 +16,10 @@
 
 ## Mobile
 
-- [ ] Push del repo su GitHub (privato): `reports/overview.md` diventa leggibile
-      dal telefono dopo ogni scrape (serve committare/pushare il report — vedi
-      cron `git add reports && git commit && git push` o GitHub Action inversa)
+- [x] Push del repo su GitHub (privato): https://github.com/Rehd96/rentwatch
+- [ ] Automatizzare il push del report dopo ogni scrape, altrimenti su GitHub
+      resta la versione vecchia (cron/systemd: `git add reports && git commit
+      -m "report" && git push`)
 - [ ] In alternativa (o in aggiunta): con la dashboard sul VPS dietro HTTPS+auth,
       il telefono accede direttamente al sito
 - [ ] Configurare Telegram in `config.toml` (token da @BotFather + chat id):
@@ -40,3 +41,7 @@
 - [x] Report Markdown `reports/overview.md` rigenerato a ogni scrape
 - [x] Notifiche Telegram (codice pronto, manca solo il token in config)
 - [x] systemd user units per scrape orario + web (`deploy/`, da abilitare)
+- [x] Ricerca limitata a ≤1000€ e ≥40 m² (`config.toml`)
+- [x] Nascondi annuncio (✕), preferiti/watchlist (♥) e filtro "novità" in dashboard
+- [x] Flag "€/stanza?" per prezzi sospetti da studenti (euristica €/m² + prezzo/locali)
+- [x] Repo GitHub privato con report leggibile da mobile
