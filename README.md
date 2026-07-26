@@ -161,6 +161,13 @@ datacenter, più sospetti di una connessione residenziale.
 - Il database (`data/`) e i report generati non sono versionati: contengono i
   tuoi dati di ricerca.
 
+## Licenza
+
+[MIT](LICENSE) — il codice si può riusare, modificare e ridistribuire, con la
+sola condizione di mantenere la nota di copyright. La licenza copre il software,
+non i dati scaricati: gli annunci restano di immobiliare.it e delle agenzie che
+li pubblicano.
+
 ## Uso responsabile
 
 Progetto personale, pensato per **una sola persona che cerca casa**. Le
