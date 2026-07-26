@@ -1,0 +1,29 @@
+# rentwatch configuration
+db_path = "data/rentwatch.db"
+
+# Seconds to wait between page requests (min, max) — keep polite.
+request_delay = [1.5, 3.0]
+
+[telegram]
+# Set enabled = true and fill in credentials to get a Telegram message
+# for every new listing. Create a bot with @BotFather to get the token;
+# get your chat id from @userinfobot.
+enabled = false
+bot_token = ""
+chat_id = ""
+
+# One or more saved searches. Params are the same query parameters
+# immobiliare.it uses in its own URLs. Useful ones:
+#   prezzoMinimo / prezzoMassimo   price range (€/month)
+#   superficieMinima               minimum surface (m²)
+#   localiMinimo / localiMassimo   number of rooms ("locali")
+#   idMZona[]                      macrozone ids (repeatable)
+# Location defaults to Torino city; override via [searches.params] if needed.
+[[searches]]
+name = "Torino - affitti fino a 1000€, min 40 m²"
+path = "/affitto-case/torino/"
+
+[searches.params]
+prezzoMassimo = 1000
+superficieMinima = 40
+# localiMinimo = 2

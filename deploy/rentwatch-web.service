@@ -1,0 +1,11 @@
+[Unit]
+Description=rentwatch - dashboard web server
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/Immobiliare_homes
+ExecStart=%h/Immobiliare_homes/.venv/bin/python -m rentwatch serve --port 8777
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

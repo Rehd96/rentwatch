@@ -1,0 +1,32 @@
+# TODO: scaffold non ancora testato — vedi TODO.md
+# Uso: cd deploy/vps && docker compose up -d --build
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/vps/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - rentwatch-data:/app/data
+      - rentwatch-reports:/app/reports
+    ports:
+      - "127.0.0.1:8777:8777"   # solo loopback: espone nginx, non il container
+
+  scraper:
+    build:
+      context: ../..
+      dockerfile: deploy/vps/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - rentwatch-data:/app/data
+      - rentwatch-reports:/app/reports
+    # scrape orario con jitter; niente cron nel container
+    command: >
+      sh -c 'while true; do
+               python -m rentwatch scrape;
+               sleep $$((3600 + RANDOM % 600));
+             done'
+
+volumes:
+  rentwatch-data:
+  rentwatch-reports:

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rentwatch · Affitti Torino</title>
+<style>
+  :root {
+    --page:           #f9f9f7;
+    --surface:        #fcfcfb;
+    --ink:            #0b0b0b;
+    --ink-2:          #52514e;
+    --muted:          #898781;
+    --grid:           #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --accent:         #2a78d6;
+    --accent-soft:    #cde2fb;
+    --good:           #006300;
+    --bad:            #d03b3b;
+    --warn-soft:      #f4e3b2;
+    --warn-ink:       #5f4a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page:         #0d0d0d;
+      --surface:      #1a1a19;
+      --ink:          #ffffff;
+      --ink-2:        #c3c2b7;
+      --muted:        #898781;
+      --grid:         #2c2c2a;
+      --baseline:     #383835;
+      --border:       rgba(255,255,255,0.10);
+      --accent:       #3987e5;
+      --accent-soft:  #184f95;
+      --good:         #0ca30c;
+      --bad:          #e66767;
+      --warn-soft:    #4a3c10;
+      --warn-ink:     #e8d48a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  header h1 { font-size: 20px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 13px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .tile .label { color: var(--ink-2); font-size: 12px; }
+  .tile .value { font-size: 30px; font-weight: 650; margin-top: 2px; }
+  .tile .hint { color: var(--muted); font-size: 12px; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+             background: var(--surface); border: 1px solid var(--border);
+             border-radius: 10px; padding: 10px 12px; margin-bottom: 18px; }
+  .filters label { color: var(--ink-2); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+  .filters input[type=number], .filters input[type=search], .filters select {
+    background: var(--page); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13px; width: 90px;
+  }
+  .filters input[type=search] { width: 160px; }
+  .filters select { width: auto; max-width: 210px; }
+  .filters .count { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  section h2 { font-size: 15px; margin: 22px 0 10px; }
+
+  /* zone chart */
+  .chart { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .chart .rowz { display: grid; grid-template-columns: 220px 1fr 110px; gap: 10px;
+                 align-items: center; padding: 3px 0; border-radius: 6px; cursor: default; }
+  .chart .rowz:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .chart .zname { font-size: 12.5px; color: var(--ink-2); white-space: nowrap;
+                  overflow: hidden; text-overflow: ellipsis; text-align: right; }
+  .chart .track { position: relative; height: 18px; display: flex; align-items: center; }
+  .chart .track::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+                          width: 1px; background: var(--baseline); }
+  .chart .bar { height: 10px; background: var(--accent); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .chart .zval { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .chart .zval .n { color: var(--muted); }
+
+  /* listings table */
+  table { width: 100%; border-collapse: collapse; background: var(--surface);
+          border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .tablewrap { overflow-x: auto; border-radius: 10px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid);
+           font-size: 13px; vertical-align: middle; }
+  th { color: var(--ink-2); font-size: 12px; font-weight: 600; cursor: pointer; user-select: none;
+       white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
+  th .arrow { color: var(--accent); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td img { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; display: block;
+           background: var(--grid); }
+  td a { color: var(--accent); text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+  .zone { color: var(--muted); font-size: 12px; }
+  .badge-new { display: inline-block; background: var(--accent-soft); color: var(--ink);
+               font-size: 11px; font-weight: 600; border-radius: 5px; padding: 1px 6px; margin-left: 6px; }
+  .drop { color: var(--good); font-weight: 600; }
+  .rise { color: var(--bad); font-weight: 600; }
+  .inactive td { opacity: 0.45; }
+  .hiddenrow td { opacity: 0.45; }
+  .badge-sus { display: inline-block; background: var(--warn-soft); color: var(--warn-ink);
+               font-size: 11px; font-weight: 600; border-radius: 5px; padding: 1px 6px;
+               margin-left: 6px; cursor: help; }
+  .hidebtn, .likebtn { background: none; border: 1px solid var(--border); border-radius: 6px;
+             color: var(--muted); font: inherit; font-size: 13px; line-height: 1;
+             padding: 4px 8px; cursor: pointer; }
+  .hidebtn:hover { color: var(--bad); border-color: var(--bad); }
+  .likebtn:hover { color: var(--accent); border-color: var(--accent); }
+  .likebtn.on { color: var(--bad); border-color: var(--bad); }
+  td.actions { white-space: nowrap; }
+  .more { margin: 14px auto; display: block; background: var(--surface); color: var(--ink);
+          border: 1px solid var(--border); border-radius: 8px; padding: 8px 18px; font: inherit; cursor: pointer; }
+  .more:hover { border-color: var(--accent); }
+
+  #tooltip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink);
+             border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 12.5px;
+             box-shadow: 0 4px 14px rgba(0,0,0,0.18); display: none; z-index: 10; max-width: 260px; }
+  #tooltip .t { font-weight: 600; }
+  #tooltip .s { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🏠 rentwatch — affitti a Torino</h1>
+    <span class="sub" id="lastRun"></span>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="filters">
+    <label>€ max <input type="number" id="fMaxPrice" placeholder="es. 900" step="50"></label>
+    <label>€ min <input type="number" id="fMinPrice" placeholder="0" step="50"></label>
+    <label>m² min <input type="number" id="fMinSurface" placeholder="es. 50" step="5"></label>
+    <label>locali min
+      <select id="fRooms"><option value="">tutti</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    </label>
+    <label>zona <select id="fZone"><option value="">tutte</option></select></label>
+    <label>novità
+      <select id="fNew">
+        <option value="">tutti</option>
+        <option value="1">nuovi (24h)</option>
+        <option value="3">ultimi 3 giorni</option>
+        <option value="7">ultimi 7 giorni</option>
+      </select>
+    </label>
+    <label><input type="search" id="fText" placeholder="cerca via, descrizione…"></label>
+    <label><input type="checkbox" id="fInactive"> mostra rimossi</label>
+    <label><input type="checkbox" id="fHidden"> mostra nascosti</label>
+    <label title="prezzi implausibili per l'intero alloggio: probabili stanze/posti letto per studenti"><input type="checkbox" id="fSuspect" checked> nascondi prezzi sospetti</label>
+    <label><input type="checkbox" id="fLiked"> ❤ solo preferiti</label>
+    <span class="count" id="resultCount"></span>
+  </div>
+
+  <section>
+    <h2>€/m² mediano per zona <span class="zone">(passa sopra le barre per i dettagli)</span></h2>
+    <div class="chart" id="zoneChart"></div>
+  </section>
+
+  <section>
+    <h2>Annunci</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr id="headRow"></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <button class="more" id="moreBtn" hidden>Mostra altri</button>
+  </section>
+</div>
+<div id="tooltip"></div>
+
+<script>
+const fmtEur = v => v == null ? "—" : "€ " + v.toLocaleString("it-IT");
+const state = { listings: [], filtered: [], sortKey: "first_seen", sortDir: -1, shown: 100 };
+
+const COLS = [
+  { key: "photo",          label: "" },
+  { key: "title",          label: "Annuncio" },
+  { key: "price",          label: "Prezzo",  num: true },
+  { key: "surface_m2",     label: "m²",      num: true },
+  { key: "ppm2",           label: "€/m²",    num: true },
+  { key: "rooms",          label: "Locali",  num: true },
+  { key: "floor",          label: "Piano",   num: true },
+  { key: "days_on_market", label: "Giorni",  num: true },
+  { key: "hide",           label: "" },
+];
+
+async function load() {
+  // "solo preferiti" must also show liked listings that were removed or hidden
+  const liked = document.getElementById("fLiked").checked;
+  const inactive = document.getElementById("fInactive").checked || liked;
+  const hidden = document.getElementById("fHidden").checked || liked;
+  const [over, listings] = await Promise.all([
+    fetch("/api/overview").then(r => r.json()),
+    fetch(`/api/listings?include_inactive=${inactive}&include_hidden=${hidden}`).then(r => r.json()),
+  ]);
+  state.listings = listings;
+  renderTiles(over);
+  renderZones(over.zones);
+  fillZoneFilter(over.zones);
+  if (over.last_run) {
+    document.getElementById("lastRun").textContent =
+      `ultimo aggiornamento: ${new Date(over.last_run.finished_at).toLocaleString("it-IT")}` +
+      ` · ${over.last_run.new_listings} nuovi`;
+  }
+  applyFilters();
+}
+
+function renderTiles(o) {
+  const t = [
+    ["Annunci attivi", o.active_count, ""],
+    ["Nuovi (7 giorni)", o.new_7d, ""],
+    ["Prezzo mediano", fmtEur(o.median_price), "al mese"],
+    ["€/m² mediano", o.median_ppm2 ?? "—", "canone / superficie"],
+  ];
+  document.getElementById("tiles").innerHTML = t.map(([l, v, h]) =>
+    `<div class="tile"><div class="label">${l}</div><div class="value">${v}</div><div class="hint">${h}</div></div>`
+  ).join("");
+}
+
+function renderZones(zones) {
+  const el = document.getElementById("zoneChart");
+  const data = zones.filter(z => z.median_ppm2 && z.count >= 3);
+  const max = Math.max(...data.map(z => z.median_ppm2));
+  el.innerHTML = data.map(z => `
+    <div class="rowz" data-zone="${esc(z.zone)}" data-count="${z.count}" data-price="${z.median_price}" data-ppm2="${z.median_ppm2}">
+      <div class="zname">${esc(z.zone)}</div>
+      <div class="track"><div class="bar" style="width:${(z.median_ppm2 / max * 100).toFixed(1)}%"></div></div>
+      <div class="zval">${z.median_ppm2} <span class="n">· ${z.count} ann.</span></div>
+    </div>`).join("");
+  el.querySelectorAll(".rowz").forEach(r => {
+    r.addEventListener("mousemove", e => showTip(e,
+      `<div class="t">${r.dataset.zone}</div>
+       <div class="s">${r.dataset.count} annunci attivi</div>
+       <div>canone mediano ${fmtEur(+r.dataset.price)}</div>
+       <div>${r.dataset.ppm2} €/m²</div>`));
+    r.addEventListener("mouseleave", hideTip);
+  });
+}
+
+function fillZoneFilter(zones) {
+  const sel = document.getElementById("fZone");
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">tutte</option>' +
+    zones.map(z => `<option>${esc(z.zone)}</option>`).join("");
+  sel.value = cur;
+}
+
+function applyFilters() {
+  const maxP = +document.getElementById("fMaxPrice").value || Infinity;
+  const minP = +document.getElementById("fMinPrice").value || 0;
+  const minS = +document.getElementById("fMinSurface").value || 0;
+  const rooms = document.getElementById("fRooms").value;
+  const zone = document.getElementById("fZone").value;
+  const newDays = +document.getElementById("fNew").value || 0;
+  const text = document.getElementById("fText").value.toLowerCase();
+  const hideSus = document.getElementById("fSuspect").checked;
+  const onlyLiked = document.getElementById("fLiked").checked;
+
+  state.filtered = state.listings.filter(l =>
+    (!onlyLiked || l.liked) &&
+    (!hideSus || !l.suspect || l.liked) &&
+    (l.price == null || (l.price <= maxP && l.price >= minP)) &&
+    (l.surface_m2 == null || l.surface_m2 >= minS) &&
+    (!rooms || (parseInt(l.rooms) || 0) >= +rooms || (l.rooms || "").includes("+")) &&
+    (!zone || l.macrozone === zone) &&
+    (!newDays || l.days_on_market < newDays) &&
+    (!text || ((l.title || "") + " " + (l.address || "") + " " + (l.microzone || "")).toLowerCase().includes(text))
+  );
+  sortAndRender();
+}
+
+function sortAndRender() {
+  const { sortKey, sortDir } = state;
+  state.filtered.sort((a, b) => {
+    let va = a[sortKey], vb = b[sortKey];
+    if (sortKey === "rooms" || sortKey === "floor") { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; }
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    return (va < vb ? -1 : va > vb ? 1 : 0) * sortDir;
+  });
+  state.shown = 100;
+  renderHead();
+  renderRows();
+}
+
+function renderHead() {
+  document.getElementById("headRow").innerHTML = COLS.map(c => {
+    const arrow = c.key === state.sortKey ? `<span class="arrow">${state.sortDir < 0 ? "▼" : "▲"}</span>` : "";
+    return `<th class="${c.num ? "num" : ""}" data-key="${c.key}">${c.label} ${arrow}</th>`;
+  }).join("");
+  document.querySelectorAll("th[data-key]").forEach(th => th.onclick = () => {
+    if (th.dataset.key === "hide") return;
+    const k = th.dataset.key === "photo" ? "price" : th.dataset.key;
+    if (state.sortKey === k) state.sortDir *= -1; else { state.sortKey = k; state.sortDir = -1; }
+    sortAndRender();
+  });
+}
+
+function renderRows() {
+  const rows = state.filtered.slice(0, state.shown);
+  document.getElementById("resultCount").textContent =
+    `${state.filtered.length} risultati`;
+  document.getElementById("rows").innerHTML = rows.map(l => {
+    const isNew = l.days_on_market <= 2 && l.is_active;
+    const delta = l.price_delta < 0
+      ? ` <span class="drop" title="prezzo sceso di € ${-l.price_delta}">▼ ${fmtEur(-l.price_delta)}</span>`
+      : l.price_delta > 0 ? ` <span class="rise" title="prezzo salito">▲</span>` : "";
+    return `<tr class="${l.is_active ? "" : "inactive"}${l.hidden ? " hiddenrow" : ""}">
+      <td>${l.photo_url ? `<img loading="lazy" src="${esc(l.photo_url)}" alt="">` : ""}</td>
+      <td><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || "annuncio " + l.id)}</a>
+          ${isNew ? '<span class="badge-new">NUOVO</span>' : ""}
+          ${l.suspect ? '<span class="badge-sus" title="prezzo implausibile per l\'intero alloggio: probabile stanza/posto letto">€/stanza?</span>' : ""}
+          <div class="zone">${esc([l.macrozone, l.microzone].filter(Boolean).join(" · "))}${l.is_active ? "" : " · rimosso"}${l.hidden ? " · nascosto" : ""}</div></td>
+      <td class="num">${fmtEur(l.price)}${delta}</td>
+      <td class="num">${l.surface_m2 ?? "—"}</td>
+      <td class="num">${l.ppm2 ?? "—"}</td>
+      <td class="num">${esc(l.rooms ?? "—")}</td>
+      <td class="num">${esc(l.floor ?? "—")}</td>
+      <td class="num">${l.days_on_market}</td>
+      <td class="actions">
+        <button class="likebtn${l.liked ? " on" : ""}" data-id="${l.id}" data-liked="${l.liked ? 1 : 0}"
+                title="${l.liked ? "togli dai preferiti" : "aggiungi ai preferiti"}">${l.liked ? "♥" : "♡"}</button>
+        <button class="hidebtn" data-id="${l.id}" data-hidden="${l.hidden ? 1 : 0}"
+                title="${l.hidden ? "rimetti tra i risultati" : "nascondi: non mi interessa"}">
+          ${l.hidden ? "↩" : "✕"}</button></td>
+    </tr>`;
+  }).join("");
+  document.querySelectorAll(".hidebtn").forEach(b =>
+    b.onclick = () => toggleHidden(+b.dataset.id, b.dataset.hidden === "0"));
+  document.querySelectorAll(".likebtn").forEach(b =>
+    b.onclick = () => toggleLiked(+b.dataset.id, b.dataset.liked === "0"));
+  const btn = document.getElementById("moreBtn");
+  btn.hidden = state.filtered.length <= state.shown;
+  btn.textContent = `Mostra altri (${state.filtered.length - state.shown} rimanenti)`;
+}
+
+async function toggleHidden(id, hide) {
+  const res = await fetch(`/api/listings/${id}/hidden?value=${hide}`, { method: "POST" });
+  if (!res.ok) return;
+  const l = state.listings.find(x => x.id === id);
+  if (l) l.hidden = hide ? 1 : 0;
+  if (hide && !document.getElementById("fHidden").checked && !document.getElementById("fLiked").checked) {
+    state.listings = state.listings.filter(x => x.id !== id);
+  }
+  applyFilters();
+}
+
+async function toggleLiked(id, like) {
+  const res = await fetch(`/api/listings/${id}/liked?value=${like}`, { method: "POST" });
+  if (!res.ok) return;
+  const l = state.listings.find(x => x.id === id);
+  if (l) l.liked = like ? 1 : 0;
+  applyFilters();
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+const tip = document.getElementById("tooltip");
+function showTip(e, html) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const x = Math.min(e.clientX + 14, window.innerWidth - 280);
+  tip.style.left = x + "px"; tip.style.top = (e.clientY + 14) + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+["fMaxPrice", "fMinPrice", "fMinSurface", "fRooms", "fZone", "fNew", "fText"].forEach(id =>
+  document.getElementById(id).addEventListener("input", applyFilters));
+document.getElementById("fInactive").addEventListener("change", load);
+document.getElementById("fHidden").addEventListener("change", load);
+document.getElementById("fSuspect").addEventListener("change", applyFilters);
+document.getElementById("fLiked").addEventListener("change", load);
+document.getElementById("moreBtn").onclick = () => { state.shown += 200; renderRows(); };
+
+load();
+</script>
+</body>
+</html>
