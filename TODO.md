@@ -16,10 +16,13 @@
 
 ## Mobile
 
-- [x] Push del repo su GitHub (privato): https://github.com/Rehd96/rentwatch
-- [ ] Automatizzare il push del report dopo ogni scrape, altrimenti su GitHub
-      resta la versione vecchia (cron/systemd: `git add reports && git commit
-      -m "report" && git push`)
+- [x] Push del repo su GitHub: https://github.com/Rehd96/rentwatch
+- [ ] Scegliere un canale per il report da mobile. `reports/` non è più
+      versionato (conterrebbe i preferiti in chiaro in un repo pubblico), quindi
+      le opzioni sono:
+      - dashboard sul VPS dietro HTTPS + basic auth (vedi sezione Deploy)
+      - notifiche Telegram (già implementate, serve solo il token)
+      - repo/gist **privato** separato dove pushare solo `reports/overview.md`
 - [ ] In alternativa (o in aggiunta): con la dashboard sul VPS dietro HTTPS+auth,
       il telefono accede direttamente al sito
 - [ ] Configurare Telegram in `config.toml` (token da @BotFather + chat id):
