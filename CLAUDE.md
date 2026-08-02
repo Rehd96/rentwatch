@@ -12,7 +12,9 @@ senza controllare gli annunci a mano.
 .venv/bin/python -m rentwatch serve              # dashboard http://127.0.0.1:8777
 .venv/bin/python -m rentwatch serve --root-path /case   # dietro nginx su /case/
 .venv/bin/python -m rentwatch report             # rigenera solo il report MD
-.venv/bin/python -m rentwatch set-password       # password della dashboard
+.venv/bin/python -m rentwatch set-password       # aggiunge utente / cambia password
+.venv/bin/python -m rentwatch list-users         # account della dashboard
+.venv/bin/python -m rentwatch remove-user        # toglie un account
 .venv/bin/python -m rentwatch telegram-test      # verifica token + chat id
 .venv/bin/python -m rentwatch bot                # loop comandi Telegram
 ```
@@ -36,6 +38,11 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + login su
 - `rentwatch/auth.py` — PBKDF2 + cookie di sessione firmato HMAC, solo stdlib.
   Il gate è un **middleware**, non una dependency per rotta: una rotta aggiunta
   domani nasce protetta. Pubbliche solo `/login` e `/healthz`.
+  Gli account stanno in `[[auth.users]]`; `verify_login()` fa comunque un
+  PBKDF2 su un hash fittizio quando l'utente non esiste, altrimenti il tempo di
+  risposta direbbe quali nomi sono veri. `config._normalise_auth()` converte i
+  vecchi `[auth] username/password_hash` singoli nella lista e li rimuove: una
+  sola fonte di verità, migrata al primo salvataggio.
 - `rentwatch/notify.py` — Telegram: filtri, template, ore di silenzio, ribassi.
   In ore di silenzio le notifiche finiscono in `notify_queue` e partono al primo
   run utile — non si perdono.

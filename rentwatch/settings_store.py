@@ -54,6 +54,13 @@ def dumps(cfg: dict) -> str:
     for key, value in cfg.items():
         if isinstance(value, dict):
             lines += ["", f"[{key}]", *_table_body(value)]
+            # Arrays of tables before sub-tables: once [a.b] is open, a later
+            # [[a.users]] would still parse, but the file reads as if users
+            # belonged to b. Emitting them first keeps it honest.
+            for sub_key, sub_value in value.items():
+                if _is_table_array(sub_value):
+                    for entry in sub_value:
+                        lines += ["", f"[[{key}.{sub_key}]]", *_table_body(entry)]
             for sub_key, sub_value in value.items():
                 if isinstance(sub_value, dict):
                     lines += ["", f"[{key}.{sub_key}]", *_table_body(sub_value)]

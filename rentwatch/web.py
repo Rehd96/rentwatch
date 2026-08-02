@@ -42,10 +42,12 @@ def _days_since(iso: str) -> int:
     return (datetime.now(timezone.utc) - dt).days
 
 
-def _page(name: str, base: str) -> HTMLResponse:
+def _page(name: str, base: str, user: str = "") -> HTMLResponse:
     """Serve a static page with its base URL baked in, so the same files work
     at the domain root locally and under /case/ on the VPS."""
-    html = (STATIC_DIR / name).read_text(encoding="utf-8").replace("__BASE__", base)
+    html = ((STATIC_DIR / name).read_text(encoding="utf-8")
+            .replace("__BASE__", base)
+            .replace("__USER__", user))
     return HTMLResponse(html)
 
 
@@ -66,9 +68,10 @@ def create_app(cfg: dict) -> FastAPI:
     secret = auth.get_secret_key(cfg)
     throttle = auth.LoginThrottle()
 
-    if auth_enabled and not auth_cfg.get("password_hash"):
-        log.warning("auth is on but no password is set — the dashboard will "
-                    "refuse every login. Run: python -m rentwatch set-password")
+    if auth_enabled and not [u for u in auth_cfg.get("users") or []
+                             if u.get("password_hash")]:
+        log.warning("auth is on but no account has a password — the dashboard "
+                    "will refuse every login. Run: python -m rentwatch set-password")
 
     def base_of(request: Request) -> str:
         """URL prefix this app is mounted under, always ending in '/'."""
@@ -134,19 +137,18 @@ def create_app(cfg: dict) -> FastAPI:
             return login_html(request,
                               f"Troppi tentativi. Riprova tra {wait} secondi.", 429)
 
-        stored = auth_cfg.get("password_hash") or ""
-        ok = (username == auth_cfg.get("username", "ion")
-              and stored and auth.verify_password(password, stored))
-        if not ok:
+        matched = auth.verify_login(auth_cfg, username, password)
+        if not matched:
             throttle.record_failure(ip)
             log.warning("failed login for %r from %s", username, ip)
             return login_html(request, "Credenziali non valide.", 401)
 
         throttle.reset(ip)
+        log.info("login: %s from %s", matched, ip)
         response = RedirectResponse(base_of(request), status_code=303)
         response.set_cookie(
             auth.COOKIE_NAME,
-            auth.make_token(secret, username),
+            auth.make_token(secret, matched),
             max_age=auth.SESSION_TTL,
             httponly=True,
             samesite="lax",
@@ -168,13 +170,16 @@ def create_app(cfg: dict) -> FastAPI:
 
     # ── pages ────────────────────────────────────────────────────────────────
 
+    def current_user(request: Request) -> str:
+        return getattr(request.state, "user", "") or ""
+
     @app.get("/")
     def index(request: Request):
-        return _page("index.html", base_of(request))
+        return _page("index.html", base_of(request), current_user(request))
 
     @app.get("/settings")
     def settings_page(request: Request):
-        return _page("settings.html", base_of(request))
+        return _page("settings.html", base_of(request), current_user(request))
 
     # ── listings API ─────────────────────────────────────────────────────────
 

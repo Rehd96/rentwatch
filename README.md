@@ -34,9 +34,9 @@ affittati. rentwatch fa quel lavoro e presenta solo la differenza.
 - **Notifiche Telegram** configurabili: filtri propri (prezzo, m², locali, zone,
   solo privati), testo del messaggio personalizzabile, ore di silenzio e avvisi
   sui ribassi. Un bot risponde anche ai comandi, da `/stato` a `/preferiti`.
-- **Login** sulla dashboard: sessione firmata, password PBKDF2, throttle sui
-  tentativi. Serve per poterla esporre su internet senza pubblicare la propria
-  ricerca di casa.
+- **Login** sulla dashboard, con più account: sessione firmata, password
+  PBKDF2, throttle sui tentativi. Serve per poterla esporre su internet senza
+  pubblicare la propria ricerca di casa — e per cercare casa in due.
 
 ## Requisiti
 
@@ -54,7 +54,9 @@ python3 -m venv .venv
 ## Uso
 
 ```bash
-.venv/bin/python -m rentwatch set-password          # password della dashboard
+.venv/bin/python -m rentwatch set-password          # aggiunge un utente / cambia password
+.venv/bin/python -m rentwatch list-users            # chi può entrare
+.venv/bin/python -m rentwatch remove-user           # toglie un utente
 .venv/bin/python -m rentwatch scrape                # scansione completa
 .venv/bin/python -m rentwatch scrape --max-pages 2  # prova veloce
 .venv/bin/python -m rentwatch serve                 # dashboard su :8777
@@ -63,8 +65,31 @@ python3 -m venv .venv
 .venv/bin/python -m rentwatch bot                   # risponde ai comandi Telegram
 ```
 
-La dashboard chiede il login: imposta prima una password con `set-password`.
-Su un portatile isolato si può togliere con `[auth] enabled = false`.
+La dashboard chiede il login: crea prima un utente con `set-password`. Su un
+portatile isolato si può togliere con `[auth] enabled = false`.
+
+### Più di un utente
+
+Ogni persona ha il suo account — utile se cercate casa in due: preferiti e
+annunci nascosti restano condivisi (è la stessa ricerca), ma ognuno entra con
+le proprie credenziali e in alto vede il nome con cui è entrato.
+
+```bash
+.venv/bin/python -m rentwatch set-password --username ion
+.venv/bin/python -m rentwatch set-password --username elena
+.venv/bin/python -m rentwatch list-users
+```
+
+`set-password` su un nome che esiste già ne cambia la password; su un nome
+nuovo crea l'account. Non sovrascrive mai un utente diverso, così un errore di
+battitura in `--username` crea un account di troppo invece di cancellare quello
+di un'altra persona (`remove-user` lo toglie). L'ultimo account non si può
+rimuovere finché il login è attivo: chiuderebbe fuori tutti.
+
+Il limite sui tentativi è **per indirizzo IP**, non per utente: cinque errori
+dalla stessa connessione e si aspettano cinque minuti, chiunque li abbia fatti.
+È voluto — contare per utente permetterebbe a un estraneo di bloccare l'accesso
+a una persona sbagliando la sua password apposta.
 
 La prima scansione popola il database senza inviare notifiche (sarebbe uno
 sciame di messaggi per l'intero mercato); dalla seconda in poi segnala solo le
@@ -209,8 +234,9 @@ portale, più sospetti di una connessione residenziale.
   la struttura dei dati si ritrova in `__NEXT_DATA__` di una pagina di ricerca.
 - Nessuna test suite: la verifica è `scrape --max-pages 2` più un colpo d'occhio
   su `/api/overview` (401 senza cookie di sessione, 200 dopo il login).
-- Un solo utente. Il login è pensato per proteggere una dashboard personale, non
-  per gestire account multipli.
+- Gli account sono tutti uguali: non ci sono ruoli o permessi, chi entra vede e
+  modifica tutto. È pensato per due o tre persone che cercano casa insieme, non
+  per un'applicazione multi-utente vera.
 - Il database (`data/`) e i report generati non sono versionati: contengono i
   tuoi dati di ricerca.
 

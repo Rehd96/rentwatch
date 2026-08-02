@@ -131,12 +131,29 @@ cd /root/Immobiliare_homes
 It asks twice, hashes with PBKDF2 and writes config.local.toml. The plain
 password is never stored anywhere.
 
-CHECK the file it wrote, and that the hash is a hash:
+ADDING THE SECOND PERSON — same command, different name:
 
-grep -A3 '^\[auth\]' config.local.toml
+./.venv/bin/python -m rentwatch set-password --username elena
+./.venv/bin/python -m rentwatch list-users
+systemctl restart rentwatch-web        # only if the service already exists
 
-You want `password_hash = "pbkdf2_sha256$260000$..."`. config.local.toml is
-gitignored — it holds this hash and, later, your bot token. Do not commit it.
+CHECK: list-users shows both, each "ok". Then:
+
+grep -A3 'auth.users' config.local.toml
+
+You want a `[[auth.users]]` block per person, each with a
+`password_hash = "pbkdf2_sha256$260000$..."`. config.local.toml is gitignored —
+it holds these hashes and, later, your bot token. Do not commit it.
+
+set-password on a name that already exists changes that password; on a new name
+it creates the account. It never overwrites a different user, so a typo in
+--username leaves you with one account too many rather than locking the other
+person out — `remove-user --username <typo>` cleans that up. The last remaining
+account cannot be removed while the login is on.
+
+Upgrading from a single-user config: nothing to do. The old `username` /
+`password_hash` pair under [auth] is folded into the list on load, and rewritten
+in the new shape the next time anything saves.
 
 
 ───────────────────────────────────────────────────────────────────────────

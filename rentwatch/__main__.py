@@ -88,11 +88,26 @@ def cmd_serve(cfg: dict, args: argparse.Namespace) -> int:
 
 
 def cmd_set_password(cfg: dict, args: argparse.Namespace) -> int:
-    """Hash a password into config.local.toml. The plain text is never stored."""
-    from .auth import hash_password
+    """Add an account, or change the password of one that exists.
+
+    Never overwrites a different account: with two people on the dashboard,
+    silently replacing the other one's login would be the worst possible
+    behaviour for a typo in --username.
+    """
+    from .auth import find_user, hash_password
     from .settings_store import save_config
 
-    password = args.password or getpass.getpass("Nuova password dashboard: ")
+    auth = cfg.setdefault("auth", {})
+    users = auth.setdefault("users", [])
+
+    username = (args.username or input("Utente: ")).strip()
+    if not username:
+        print("Serve un nome utente.", file=sys.stderr)
+        return 1
+
+    existing = find_user(auth, username)
+
+    password = args.password or getpass.getpass(f"Password per '{username}': ")
     if not args.password:
         if password != getpass.getpass("Ripeti: "):
             print("Le password non coincidono.", file=sys.stderr)
@@ -101,14 +116,60 @@ def cmd_set_password(cfg: dict, args: argparse.Namespace) -> int:
         print("Almeno 8 caratteri, per favore.", file=sys.stderr)
         return 1
 
-    cfg.setdefault("auth", {})
-    cfg["auth"]["enabled"] = True
-    if args.username:
-        cfg["auth"]["username"] = args.username
-    cfg["auth"]["password_hash"] = hash_password(password)
-    path = save_config(cfg)
-    print(f"Password impostata per '{cfg['auth']['username']}' in {path}")
-    print("Riavvia il servizio web perché abbia effetto.")
+    auth["enabled"] = True
+    if existing:
+        existing["password_hash"] = hash_password(password)
+        action = "aggiornata la password di"
+    else:
+        users.append({"username": username, "password_hash": hash_password(password)})
+        action = "creato l'utente"
+
+    # Write back to whatever --config was read, not always config.local.toml.
+    path = save_config(cfg, args.config)
+    print(f"{action.capitalize()} '{username}' in {path}")
+    print(f"Utenti ora: {', '.join(u['username'] for u in users)}")
+    print("Riavvia il servizio web perché abbia effetto:")
+    print("  systemctl restart rentwatch-web")
+    return 0
+
+
+def cmd_list_users(cfg: dict, args: argparse.Namespace) -> int:
+    users = cfg.get("auth", {}).get("users") or []
+    if not users:
+        print("Nessun utente. Creane uno con: python -m rentwatch set-password")
+        return 1
+    print(f"Login attivo: {'sì' if cfg['auth'].get('enabled', True) else 'NO'}")
+    for user in users:
+        state = "ok" if user.get("password_hash") else "SENZA PASSWORD — non può entrare"
+        print(f"  {user['username']:<20} {state}")
+    return 0
+
+
+def cmd_remove_user(cfg: dict, args: argparse.Namespace) -> int:
+    from .settings_store import save_config
+
+    auth = cfg.setdefault("auth", {})
+    users = auth.setdefault("users", [])
+    username = (args.username or input("Utente da rimuovere: ")).strip()
+
+    remaining = [u for u in users if u.get("username") != username]
+    if len(remaining) == len(users):
+        print(f"Nessun utente '{username}'.", file=sys.stderr)
+        return 1
+    # Removing the last account with the login still on locks everybody out,
+    # and the only way back in is editing the config over SSH.
+    if not remaining and auth.get("enabled", True):
+        print("È l'ultimo utente: rimuoverlo chiuderebbe fuori tutti.",
+              file=sys.stderr)
+        print("Creane un altro prima, oppure disattiva il login con "
+              "[auth] enabled = false.", file=sys.stderr)
+        return 1
+
+    auth["users"] = remaining
+    save_config(cfg, args.config)
+    print(f"Rimosso '{username}'. Utenti ora: "
+          f"{', '.join(u['username'] for u in remaining) or '(nessuno)'}")
+    print("  systemctl restart rentwatch-web")
     return 0
 
 
@@ -173,10 +234,16 @@ def main() -> int:
 
     sub.add_parser("report", help="regenerate reports/overview.md from the database")
 
-    p_pw = sub.add_parser("set-password", help="set the dashboard login password")
+    p_pw = sub.add_parser("set-password",
+                          help="add a dashboard account, or change its password")
     p_pw.add_argument("--username", default=None)
     p_pw.add_argument("--password", default=None,
                       help="non-interactive; note it lands in your shell history")
+
+    sub.add_parser("list-users", help="show the dashboard accounts")
+
+    p_rm = sub.add_parser("remove-user", help="delete a dashboard account")
+    p_rm.add_argument("--username", default=None)
 
     sub.add_parser("telegram-test", help="verify the bot token and chat id")
     sub.add_parser("telegram-chat-id",
@@ -191,6 +258,8 @@ def main() -> int:
         "scrape": cmd_scrape,
         "serve": cmd_serve,
         "set-password": cmd_set_password,
+        "list-users": cmd_list_users,
+        "remove-user": cmd_remove_user,
         "telegram-test": cmd_telegram_test,
         "telegram-chat-id": cmd_telegram_chat_id,
         "bot": cmd_bot,

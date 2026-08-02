@@ -38,6 +38,33 @@ def hash_password(password: str) -> str:
     )
 
 
+# Verified against when the username does not exist, purely to burn the same
+# amount of time a real check would. Built at import so it costs nothing later.
+_DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
+
+
+def find_user(auth_cfg: dict, username: str) -> dict | None:
+    for user in auth_cfg.get("users") or []:
+        if user.get("username") == username:
+            return user
+    return None
+
+
+def verify_login(auth_cfg: dict, username: str, password: str) -> str | None:
+    """Return the matched username, or None.
+
+    An unknown username still runs one PBKDF2 against a throwaway hash: without
+    it, "no such user" returns in microseconds while a wrong password takes
+    ~200ms, and that difference tells an attacker which names are real.
+    """
+    user = find_user(auth_cfg, username)
+    stored = (user or {}).get("password_hash") or ""
+    if not stored:
+        verify_password(password, _DUMMY_HASH)
+        return None
+    return user["username"] if verify_password(password, stored) else None
+
+
 def verify_password(password: str, stored: str) -> bool:
     try:
         algo, iterations, salt_b64, digest_b64 = stored.split("$")

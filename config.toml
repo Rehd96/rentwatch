@@ -11,12 +11,24 @@ request_delay = [1.5, 3.0]
 
 [auth]
 # The dashboard shows addresses, prices and the flats you liked, so it asks for
-# a password. Set one with:  python -m rentwatch set-password
-# Turning this off is only reasonable on a laptop nothing else can reach.
+# a password. Turning this off is only reasonable on a laptop nothing else can
+# reach.
 enabled = true
-username = "ion"
-password_hash = ""     # written by set-password, into config.local.toml
 secret_key = ""        # blank -> generated once into data/session_secret
+
+# One [[auth.users]] block per person. Never write them here by hand: the
+# hashes belong in config.local.toml, which is gitignored.
+#
+#   python -m rentwatch set-password --username ion      # add, or change a password
+#   python -m rentwatch list-users                       # who can log in
+#   python -m rentwatch remove-user --username ospite
+#
+# [[auth.users]]
+# username = "ion"
+# password_hash = "pbkdf2_sha256$260000$...$..."
+#
+# Configs written before multi-user had `username` and `password_hash` directly
+# under [auth]; those still load and are folded into the list automatically.
 
 [schedule]
 # What the systemd timer is set to. Changing this line does not move the timer;
