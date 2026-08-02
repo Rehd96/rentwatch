@@ -247,8 +247,12 @@ Now open https://labustagialla.it/case/ in a browser and log in.
 ───────────────────────────────────────────────────────────────────────────
 
 1. In Telegram, talk to @BotFather → /newbot → copy the token.
-2. Talk to @userinfobot → it replies with your numeric chat id.
-3. Open https://labustagialla.it/case/settings, paste both, tick "Invia
+2. Open your new bot and press Start. BotFather's confirmation message already
+   contains the t.me/<botname> link — tap that rather than searching for it.
+   Nothing can be delivered until the bot has been started at least once.
+3. Get the chat id from the box:
+       cd /root/Immobiliare_homes && ./.venv/bin/python -m rentwatch telegram-chat-id
+4. Open https://labustagialla.it/case/settings, paste both, tick "Invia
    notifiche Telegram", press "Invia messaggio di prova".
 
 CHECK: the test message arrives on your phone. If it does not, the page tells
