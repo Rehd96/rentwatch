@@ -13,7 +13,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from .config import LOCAL_CONFIG, PROJECT_ROOT, load_config
+from .config import LOCAL_CONFIG, PROJECT_ROOT, load_config, tomllib
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +88,6 @@ def save_config(cfg: dict, path: Path | None = None) -> Path:
     text = dumps(cfg)
 
     # Refuse to write something we cannot read back.
-    import tomllib
     tomllib.loads(text)
 
     if path.exists():

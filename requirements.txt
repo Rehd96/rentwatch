@@ -1,3 +1,6 @@
 curl_cffi>=0.15
 fastapi>=0.115
 uvicorn>=0.30
+# Only on Python 3.10 and older, where tomllib is not in the stdlib yet.
+# Same library, same API — tomllib was adopted from it.
+tomli>=2.0; python_version < "3.11"

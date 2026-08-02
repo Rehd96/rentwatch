@@ -40,7 +40,9 @@ affittati. rentwatch fa quel lavoro e presenta solo la differenza.
 
 ## Requisiti
 
-Python 3.11+ e tre dipendenze (`curl_cffi`, `fastapi`, `uvicorn`).
+Python 3.10+ e tre dipendenze (`curl_cffi`, `fastapi`, `uvicorn`). Su Python
+3.10 se ne aggiunge una quarta, `tomli`, perché `tomllib` è entrato nella
+libreria standard solo con la 3.11 — pip la installa da sola quando serve.
 
 ```bash
 git clone https://github.com/Rehd96/rentwatch.git

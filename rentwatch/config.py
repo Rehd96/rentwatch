@@ -1,5 +1,11 @@
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:          # Python 3.10 and older — the VPS is on 3.10
+    # tomli is what tomllib was adopted from: same API, pure Python, no build.
+    # Imported under the stdlib name so the rest of the code cannot tell.
+    import tomli as tomllib
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = PROJECT_ROOT / "config.toml"

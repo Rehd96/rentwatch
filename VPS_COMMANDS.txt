@@ -56,9 +56,19 @@ python3 -m venv .venv
 ./.venv/bin/pip install --upgrade pip
 ./.venv/bin/pip install -r requirements.txt
 ./.venv/bin/python -c "import curl_cffi, fastapi, uvicorn; print('deps ok')"
+./.venv/bin/python -c "from rentwatch.config import load_config, tomllib; \
+  print('toml reader:', tomllib.__name__); print('config ok:', bool(load_config()))"
 
-CHECK: "deps ok". curl_cffi ships compiled wheels; if pip tries to build from
-source, `apt install python3-dev build-essential` first.
+CHECK: "deps ok", then "toml reader: tomli" and "config ok: True".
+
+This box is on Python 3.10, where `tomllib` is not in the standard library yet
+(it arrived in 3.11). requirements.txt installs `tomli` — the library tomllib
+was adopted from, same API — only on 3.10 and older, and the code imports it
+under the stdlib name. On 3.11+ the line above prints "tomllib" instead; both
+are correct. If it says ModuleNotFoundError, the pip install did not finish.
+
+curl_cffi ships compiled wheels; if pip tries to build from source instead,
+`apt install python3-dev build-essential` first.
 
 
 ───────────────────────────────────────────────────────────────────────────
