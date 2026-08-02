@@ -51,6 +51,17 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
     status TEXT DEFAULT 'running'
 );
 
+-- Hearts, one row per person per listing. A separate table rather than more
+-- columns on listings: two people looking at the same flat have their own
+-- opinion of it, and both want to see the other's.
+CREATE TABLE IF NOT EXISTS favourites (
+    listing_id INTEGER NOT NULL,
+    username TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (listing_id, username)
+);
+CREATE INDEX IF NOT EXISTS idx_favourites_user ON favourites(username);
+
 -- Telegram messages that came due during quiet hours. Drained by the first
 -- run after the window, so a listing found at 3am is still announced at 8am
 -- instead of being silently lost.
@@ -156,6 +167,80 @@ def deactivate_unseen(conn: sqlite3.Connection, run_started: str) -> int:
         (run_started,),
     )
     return cur.rowcount
+
+
+def adopt_legacy_likes(conn: sqlite3.Connection, username: str) -> int:
+    """Give the pre-multi-user hearts to whoever was the only user.
+
+    The old schema had one `liked` flag per listing with no idea who set it.
+    Those hearts were somebody's, and the only honest guess is the account that
+    existed at the time — the first one in the config. Runs once: after this
+    the favourites table is no longer empty.
+    """
+    if not username:
+        return 0
+    already = conn.execute("SELECT COUNT(*) c FROM favourites").fetchone()["c"]
+    if already:
+        return 0
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO favourites (listing_id, username, created_at)"
+        " SELECT id, ?, ? FROM listings WHERE liked = 1",
+        (username, now_iso()),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def set_favourite(conn: sqlite3.Connection, listing_id: int, username: str,
+                  value: bool) -> bool:
+    """Add or remove one person's heart. False if the listing does not exist."""
+    if not conn.execute("SELECT 1 FROM listings WHERE id = ?",
+                        (listing_id,)).fetchone():
+        return False
+    if value:
+        conn.execute(
+            "INSERT OR IGNORE INTO favourites (listing_id, username, created_at)"
+            " VALUES (?, ?, ?)", (listing_id, username, now_iso()))
+    else:
+        conn.execute("DELETE FROM favourites WHERE listing_id = ? AND username = ?",
+                     (listing_id, username))
+    # `liked` stays in sync so the Markdown report and any old query still work.
+    conn.execute(
+        "UPDATE listings SET liked = (SELECT COUNT(*) > 0 FROM favourites f"
+        " WHERE f.listing_id = listings.id) WHERE id = ?", (listing_id,))
+    conn.commit()
+    return True
+
+
+def favourites_by_listing(conn: sqlite3.Connection) -> dict[int, list[str]]:
+    """{listing_id: [username, ...]} for every hearted listing."""
+    out: dict[int, list[str]] = {}
+    for row in conn.execute(
+            "SELECT listing_id, username FROM favourites ORDER BY username"):
+        out.setdefault(row["listing_id"], []).append(row["username"])
+    return out
+
+
+def favourite_listings(conn: sqlite3.Connection, username: str | None = None,
+                       limit: int = 50) -> list[dict]:
+    """Hearted listings, newest heart first, each with `liked_by` attached."""
+    if username:
+        rows = conn.execute(
+            "SELECT l.*, f.created_at AS hearted_at FROM listings l"
+            " JOIN favourites f ON f.listing_id = l.id WHERE f.username = ?"
+            " ORDER BY f.created_at DESC LIMIT ?", (username, limit)).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT l.*, MAX(f.created_at) AS hearted_at FROM listings l"
+            " JOIN favourites f ON f.listing_id = l.id"
+            " GROUP BY l.id ORDER BY hearted_at DESC LIMIT ?", (limit,)).fetchall()
+    by_listing = favourites_by_listing(conn)
+    listings = []
+    for row in rows:
+        listing = dict(row)
+        listing["liked_by"] = by_listing.get(row["id"], [])
+        listings.append(listing)
+    return listings
 
 
 def get_listing(conn: sqlite3.Connection, listing_id: int) -> dict | None:

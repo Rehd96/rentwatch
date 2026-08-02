@@ -376,6 +376,11 @@ CHECK: "bot @yourbot listening (only chat NNN is answered)". Then send it
 Commands: /stato /ultimi /preferiti /filtri /prezzo /superficie /silenzia
           /riattiva /aiuto
 
+/preferiti lists everyone's hearts and says who marked each one — "♥ elena" or
+"♥ elena + ion". /preferiti elena narrows it to one person, and /stato breaks
+the count down per user. The ♥ itself is personal (each account has its own);
+the ✕ "hide" stays shared, because ruling a flat out is a joint decision.
+
 It answers your chat_id and nobody else's — a bot token in the wrong hands
 would otherwise read out your shortlist.
 

@@ -116,6 +116,9 @@
   .hidebtn:hover { color: var(--bad); border-color: var(--bad); }
   .likebtn:hover { color: var(--accent); border-color: var(--accent); }
   .likebtn.on { color: var(--bad); border-color: var(--bad); }
+  /* hearted by the other person, not by me: visible but clearly not mine */
+  .likebtn.other { border-color: var(--bad); opacity: .75; }
+  .heartedby { color: var(--bad); }
   td.actions { white-space: nowrap; }
   .more { margin: 14px auto; display: block; background: var(--surface); color: var(--ink);
           border: 1px solid var(--border); border-radius: 8px; padding: 8px 18px; font: inherit; cursor: pointer; }
@@ -161,7 +164,7 @@
     <label><input type="checkbox" id="fInactive"> mostra rimossi</label>
     <label><input type="checkbox" id="fHidden"> mostra nascosti</label>
     <label title="prezzi implausibili per l'intero alloggio: probabili stanze/posti letto per studenti"><input type="checkbox" id="fSuspect" checked> nascondi prezzi sospetti</label>
-    <label><input type="checkbox" id="fLiked"> ❤ solo preferiti</label>
+    <label title="i preferiti di tutti: sotto ogni annuncio c'è chi l'ha segnato"><input type="checkbox" id="fLiked"> ❤ solo preferiti</label>
     <span class="count" id="resultCount"></span>
   </div>
 
@@ -186,6 +189,15 @@
 <script>
 // Injected by the server: "/" locally, "/case/" when mounted under a prefix.
 const BASE = "__BASE__";
+const ME = "__USER__";
+
+// Who hearted this, shown next to the zone. Only worth saying when it is not
+// just me — with one account it would be noise on every row.
+function heartedBy(l) {
+  const hearts = l.liked_by || [];
+  if (!hearts.length || (hearts.length === 1 && hearts[0] === ME)) return "";
+  return ` · <span class="heartedby">♥ ${esc(hearts.join(" + "))}</span>`;
+}
 const fmtEur = v => v == null ? "—" : "€ " + v.toLocaleString("it-IT");
 const state = { listings: [], filtered: [], sortKey: "first_seen", sortDir: -1, shown: 100 };
 
@@ -273,9 +285,13 @@ function applyFilters() {
   const hideSus = document.getElementById("fSuspect").checked;
   const onlyLiked = document.getElementById("fLiked").checked;
 
+  // A heart from either person counts: the shortlist is shared, and a flat
+  // one of us liked should not vanish from the other's filter.
+  const anyHeart = l => l.liked || (l.liked_by || []).length > 0;
+
   state.filtered = state.listings.filter(l =>
-    (!onlyLiked || l.liked) &&
-    (!hideSus || !l.suspect || l.liked) &&
+    (!onlyLiked || anyHeart(l)) &&
+    (!hideSus || !l.suspect || anyHeart(l)) &&
     (l.price == null || (l.price <= maxP && l.price >= minP)) &&
     (l.surface_m2 == null || l.surface_m2 >= minS) &&
     (!rooms || (parseInt(l.rooms) || 0) >= +rooms || (l.rooms || "").includes("+")) &&
@@ -327,7 +343,7 @@ function renderRows() {
       <td><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || "annuncio " + l.id)}</a>
           ${isNew ? '<span class="badge-new">NUOVO</span>' : ""}
           ${l.suspect ? '<span class="badge-sus" title="prezzo implausibile per l\'intero alloggio: probabile stanza/posto letto">€/stanza?</span>' : ""}
-          <div class="zone">${esc([l.macrozone, l.microzone].filter(Boolean).join(" · "))}${l.is_active ? "" : " · rimosso"}${l.hidden ? " · nascosto" : ""}</div></td>
+          <div class="zone">${esc([l.macrozone, l.microzone].filter(Boolean).join(" · "))}${l.is_active ? "" : " · rimosso"}${l.hidden ? " · nascosto" : ""}${heartedBy(l)}</div></td>
       <td class="num">${fmtEur(l.price)}${delta}</td>
       <td class="num">${l.surface_m2 ?? "—"}</td>
       <td class="num">${l.ppm2 ?? "—"}</td>
@@ -335,8 +351,9 @@ function renderRows() {
       <td class="num">${esc(l.floor ?? "—")}</td>
       <td class="num">${l.days_on_market}</td>
       <td class="actions">
-        <button class="likebtn${l.liked ? " on" : ""}" data-id="${l.id}" data-liked="${l.liked ? 1 : 0}"
-                title="${l.liked ? "togli dai preferiti" : "aggiungi ai preferiti"}">${l.liked ? "♥" : "♡"}</button>
+        <button class="likebtn${l.liked ? " on" : ""}${!l.liked && (l.liked_by || []).length ? " other" : ""}"
+                data-id="${l.id}" data-liked="${l.liked ? 1 : 0}"
+                title="${l.liked ? "togli dai tuoi preferiti" : "aggiungi ai tuoi preferiti"}">${l.liked ? "♥" : "♡"}</button>
         <button class="hidebtn" data-id="${l.id}" data-hidden="${l.hidden ? 1 : 0}"
                 title="${l.hidden ? "rimetti tra i risultati" : "nascondi: non mi interessa"}">
           ${l.hidden ? "↩" : "✕"}</button></td>
@@ -365,8 +382,14 @@ async function toggleHidden(id, hide) {
 async function toggleLiked(id, like) {
   const res = await fetch(`${BASE}api/listings/${id}/liked?value=${like}`, { method: "POST" });
   if (!res.ok) return;
+  const data = await res.json();
   const l = state.listings.find(x => x.id === id);
-  if (l) l.liked = like ? 1 : 0;
+  if (l) {
+    l.liked = like ? 1 : 0;
+    // Take the full list back from the server: it still holds the other
+    // person's heart, which this toggle must not wipe from the row.
+    l.liked_by = data.liked_by || [];
+  }
   applyFilters();
 }
 

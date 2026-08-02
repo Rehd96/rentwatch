@@ -52,19 +52,22 @@ def generate_report(db_path: str, out_path: Path = REPORT_PATH) -> Path:
             SELECT * FROM listings WHERE liked = 1
             ORDER BY is_active DESC, last_seen DESC
         """).fetchall()
+        hearts = db.favourites_by_listing(conn)
         if liked:
             lines += [
                 f"## Preferiti ({len(liked)})",
                 "",
-                "| Annuncio | Zona | Prezzo | m² | Stato |",
-                "|---|---|---|---|---|",
+                "| Annuncio | ♥ | Zona | Prezzo | m² | Stato |",
+                "|---|---|---|---|---|---|",
             ]
             for r in liked:
                 gone = f"❌ rimosso ({r['last_seen'][8:10]}/{r['last_seen'][5:7]})"
                 stato = "✅ attivo" if r["is_active"] else gone
                 m2 = f"{r['surface_m2']:.0f}" if r["surface_m2"] else "—"
+                who = " + ".join(hearts.get(r["id"], [])) or "—"
                 lines.append(
-                    f"| [{(r['title'] or str(r['id']))[:60]}]({r['url']}) | {r['macrozone'] or '—'} | "
+                    f"| [{(r['title'] or str(r['id']))[:60]}]({r['url']}) | {who} | "
+                    f"{r['macrozone'] or '—'} | "
                     f"€ {r['price'] or '—'} | {m2} | {stato} |")
             lines.append("")
 

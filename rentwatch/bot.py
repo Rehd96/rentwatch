@@ -25,7 +25,7 @@ HELP = """Comandi disponibili:
 
 /stato — ultimo scrape, annunci attivi, coda
 /ultimi [n] — ultimi annunci trovati (default 5)
-/preferiti — annunci col cuore
+/preferiti [nome] — annunci col cuore, di tutti o di una persona
 /filtri — filtri di notifica attivi
 /prezzo <euro> — cambia il prezzo massimo delle notifiche
 /superficie <m2> — cambia la superficie minima
@@ -63,9 +63,15 @@ def _cmd_stato(cfg: dict, conn, args: list[str]) -> str:
     active = conn.execute(
         "SELECT COUNT(*) c FROM listings WHERE is_active = 1 AND hidden = 0"
     ).fetchone()["c"]
-    liked = conn.execute("SELECT COUNT(*) c FROM listings WHERE liked = 1").fetchone()["c"]
+    per_user = conn.execute(
+        "SELECT username, COUNT(*) c FROM favourites GROUP BY username"
+        " ORDER BY c DESC").fetchall()
+    liked = conn.execute(
+        "SELECT COUNT(DISTINCT listing_id) c FROM favourites").fetchone()["c"]
 
     lines = [f"📊 {active} annunci attivi · {liked} preferiti"]
+    if len(per_user) > 1:
+        lines.append("   ♥ " + " · ".join(f"{r['username']} {r['c']}" for r in per_user))
     if run:
         lines.append(f"🕒 Ultimo scrape: {run['finished_at'] or 'in corso'}")
         lines.append(f"   {run['listings_seen']} visti · {run['new_listings']} nuovi"
@@ -100,19 +106,28 @@ def _cmd_ultimi(cfg: dict, conn, args: list[str]) -> str:
 
 
 def _cmd_preferiti(cfg: dict, conn, args: list[str]) -> str:
-    rows = conn.execute(
-        "SELECT * FROM listings WHERE liked = 1 ORDER BY last_seen DESC LIMIT 15"
-    ).fetchall()
-    if not rows:
+    """/preferiti [nome] — everyone's hearts, or just one person's."""
+    who = args[0].strip() if args else None
+    listings = db.favourite_listings(conn, username=who, limit=15)
+    if not listings:
+        if who:
+            return f"Nessun preferito di '{who}'. Prova /preferiti senza nome."
         return "Nessun preferito. Metti ♥ agli annunci dalla dashboard."
+
     template = cfg.get("telegram", {}).get("template")
     out = []
-    for r in rows:
-        text = notify.format_listing(dict(r), template)
-        if not r["is_active"]:
+    for listing in listings:
+        text = notify.format_listing(listing, template)
+        # Whose shortlist this is on is half the point of sharing one.
+        hearts = listing.get("liked_by") or []
+        if hearts:
+            text = f"♥ {' + '.join(hearts)}\n{text}"
+        if not listing.get("is_active"):
             text = "⚠️ NON PIÙ ONLINE\n" + text
         out.append(text)
-    return "\n\n".join(out)
+
+    header = f"❤️ Preferiti di {who}" if who else "❤️ Preferiti"
+    return f"{header} ({len(listings)})\n\n" + "\n\n".join(out)
 
 
 def _cmd_filtri(cfg: dict, conn, args: list[str]) -> str:

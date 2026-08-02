@@ -65,6 +65,16 @@ def create_app(cfg: dict) -> FastAPI:
 
     auth_cfg = cfg.get("auth", {})
     auth_enabled = bool(auth_cfg.get("enabled", True))
+    first_user = next((u.get("username") for u in auth_cfg.get("users") or []
+                       if u.get("username")), "io")
+
+    # Hearts predating multi-user have no owner; hand them to the account that
+    # was the only one at the time. No-op once anyone has hearted anything.
+    _conn = db.connect(db_path)
+    _adopted = db.adopt_legacy_likes(_conn, first_user)
+    _conn.close()
+    if _adopted:
+        log.info("assigned %d existing favourites to '%s'", _adopted, first_user)
     secret = auth.get_secret_key(cfg)
     throttle = auth.LoginThrottle()
 
@@ -171,7 +181,10 @@ def create_app(cfg: dict) -> FastAPI:
     # ── pages ────────────────────────────────────────────────────────────────
 
     def current_user(request: Request) -> str:
-        return getattr(request.state, "user", "") or ""
+        """Who is acting. With the login off there is no session, so hearts are
+        attributed to the first configured account rather than to nobody."""
+        return getattr(request.state, "user", "") or (
+            "" if auth_enabled else first_user)
 
     @app.get("/")
     def index(request: Request):
@@ -184,7 +197,9 @@ def create_app(cfg: dict) -> FastAPI:
     # ── listings API ─────────────────────────────────────────────────────────
 
     @app.get("/api/listings")
-    def listings(include_inactive: bool = False, include_hidden: bool = False):
+    def listings(request: Request, include_inactive: bool = False,
+                 include_hidden: bool = False):
+        me = current_user(request)
         conn = _connect(db_path)
         try:
             conds = []
@@ -204,6 +219,7 @@ def create_app(cfg: dict) -> FastAPI:
                         ORDER BY ph.observed_at ASC LIMIT 1) AS initial_price
                 FROM listings l {where}
             """).fetchall()
+            hearts = db.favourites_by_listing(conn)
             out = []
             for r in rows:
                 d = dict(r)
@@ -213,6 +229,10 @@ def create_app(cfg: dict) -> FastAPI:
                 d["price_delta"] = (r["price"] - r["initial_price"]) \
                     if r["price"] and r["initial_price"] and r["n_prices"] > 1 else 0
                 d["suspect"] = db.is_suspect(r["price"], r["surface_m2"], r["rooms"])
+                # liked_by is everyone's hearts; liked is only mine, so the
+                # button reflects what *I* did while the row shows both.
+                d["liked_by"] = hearts.get(r["id"], [])
+                d["liked"] = 1 if me in d["liked_by"] else 0
                 out.append(d)
             return out
         finally:
@@ -287,8 +307,16 @@ def create_app(cfg: dict) -> FastAPI:
         return _set_flag(listing_id, "hidden", value)
 
     @app.post("/api/listings/{listing_id}/liked")
-    def set_liked(listing_id: int, value: bool = True):
-        return _set_flag(listing_id, "liked", value)
+    def set_liked(request: Request, listing_id: int, value: bool = True):
+        me = current_user(request) or first_user
+        conn = _connect(db_path)
+        try:
+            if not db.set_favourite(conn, listing_id, me, value):
+                return JSONResponse(status_code=404, content={"error": "unknown listing"})
+            hearts = db.favourites_by_listing(conn).get(listing_id, [])
+            return {"id": listing_id, "liked": value, "liked_by": hearts}
+        finally:
+            conn.close()
 
     @app.get("/api/price-history/{listing_id}")
     def price_history(listing_id: int):

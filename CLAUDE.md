@@ -27,8 +27,14 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + login su
 - `rentwatch/scraper.py` — client dell'API interna `api-next/search-list/listings/`
   via **curl_cffi** `impersonate="chrome"` (HTTP semplice → 403 sul TLS fingerprint).
 - `rentwatch/db.py` — SQLite `data/rentwatch.db`: `listings` (first/last_seen,
-  is_active, `hidden` = scartato a mano, `liked` = preferito/watchlist),
-  `price_history`, `scrape_runs`. Migrazioni additive in `_migrate()`.
+  is_active, `hidden` = scartato a mano), `price_history`, `scrape_runs`,
+  `favourites`, `notify_queue`. Migrazioni additive in `_migrate()`.
+- **Preferiti per utente**: tabella `favourites (listing_id, username)`. Il ♥ è
+  personale, il ✕ `hidden` resta condiviso (scartare è una decisione comune).
+  `listings.liked` sopravvive come flag derivato — lo tiene aggiornato
+  `set_favourite()` — così report e query vecchie continuano a funzionare.
+  `adopt_legacy_likes()` assegna al primo utente i ♥ messi prima degli account.
+  `/api/listings` restituisce `liked_by` (tutti) e `liked` (solo il tuo).
 - Gli annunci `hidden` restano fuori da `/api/listings` (default) e dalle
   tabelle del report, ma dentro le statistiche di mercato (mediane, zone).
 - `db.is_suspect()` — euristica "prezzo per stanza/studenti" (€/m² < 5 o

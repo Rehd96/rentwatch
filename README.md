@@ -70,8 +70,7 @@ portatile isolato si può togliere con `[auth] enabled = false`.
 
 ### Più di un utente
 
-Ogni persona ha il suo account — utile se cercate casa in due: preferiti e
-annunci nascosti restano condivisi (è la stessa ricerca), ma ognuno entra con
+Ogni persona ha il suo account — utile se cercate casa in due. Ognuno entra con
 le proprie credenziali e in alto vede il nome con cui è entrato.
 
 ```bash
@@ -90,6 +89,31 @@ Il limite sui tentativi è **per indirizzo IP**, non per utente: cinque errori
 dalla stessa connessione e si aspettano cinque minuti, chiunque li abbia fatti.
 È voluto — contare per utente permetterebbe a un estraneo di bloccare l'accesso
 a una persona sbagliando la sua password apposta.
+
+### Preferiti: personali, ma visibili a entrambi
+
+Il ♥ è di chi lo mette. Ognuno ha la sua lista, e sotto ogni annuncio si vede
+chi l'ha segnato (`♥ elena`, oppure `♥ elena + ion` quando piace a tutti e
+due). Il cuore pieno in tabella è il **tuo**; il bordo rosso senza riempimento
+vuol dire che è un preferito dell'altra persona. Togliere il proprio ♥ non
+tocca quello di nessun altro.
+
+Il filtro "❤ solo preferiti" mostra i preferiti di tutti: la lista è condivisa,
+e una casa che è piaciuta a uno non deve sparire dai filtri dell'altro.
+
+Su Telegram:
+
+```
+/preferiti          tutti i preferiti, con chi li ha segnati
+/preferiti elena    solo quelli di una persona
+/stato              conteggio dei ♥ per utente
+```
+
+I ♥ messi prima che esistessero gli account vengono assegnati al primo utente
+in configurazione — erano di qualcuno, e quello è l'unico nome plausibile.
+
+Il ✕ "nascondi", invece, resta **condiviso**: scartare una casa è una decisione
+di entrambi, non un gusto personale.
 
 La prima scansione popola il database senza inviare notifiche (sarebbe uno
 sciame di messaggi per l'intero mercato); dalla seconda in poi segnala solo le
