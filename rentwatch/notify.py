@@ -34,24 +34,38 @@ class _Blanks(dict):
 
 # ── the HTTP bit ─────────────────────────────────────────────────────────────
 
-def call(token: str, method: str, payload: dict, timeout: int = 20) -> dict | None:
-    """One Telegram API call. Returns the 'result' object, or None on failure."""
+def request(token: str, method: str, payload: dict,
+            timeout: int = 20) -> tuple[bool, object]:
+    """One Telegram API call as (ok, result-or-error-description).
+
+    The description matters: "chat not found" and "bot was blocked by the user"
+    are different problems with different fixes, and callers that only see None
+    can only say "it failed".
+    """
     if not token:
-        return None
+        return False, "nessun bot_token"
     try:
         r = requests.post(API.format(token=token, method=method),
                           json=payload, timeout=timeout)
     except Exception as e:                      # network flake, DNS, timeout
         log.warning("telegram %s failed: %s", method, e)
-        return None
-    if r.status_code != 200:
+        return False, str(e)
+    try:
+        body = r.json()
+    except Exception:
         log.warning("telegram %s: HTTP %s %s", method, r.status_code, r.text[:200])
-        return None
-    body = r.json()
+        return False, f"HTTP {r.status_code}"
     if not body.get("ok"):
-        log.warning("telegram %s: %s", method, body.get("description"))
-        return None
-    return body.get("result")
+        description = body.get("description") or f"HTTP {r.status_code}"
+        log.warning("telegram %s: %s", method, description)
+        return False, description
+    return True, body.get("result")
+
+
+def call(token: str, method: str, payload: dict, timeout: int = 20) -> dict | None:
+    """One Telegram API call. Returns the 'result' object, or None on failure."""
+    ok, result = request(token, method, payload, timeout)
+    return result if ok else None
 
 
 def send_message(cfg: dict, text: str, chat_id: str | None = None,
@@ -68,18 +82,56 @@ def send_message(cfg: dict, text: str, chat_id: str | None = None,
     return result is not None
 
 
+def known_chats(token: str) -> list[dict]:
+    """Chats that have written to the bot, from getUpdates.
+
+    The reliable way to learn a chat_id: it comes from Telegram itself, so a
+    typo or the wrong kind of id cannot survive it. Telegram only keeps recent
+    updates, so this is empty until someone messages the bot.
+    """
+    chats: dict[int, dict] = {}
+    for update in call(token, "getUpdates", {"timeout": 0}) or []:
+        message = (update.get("message") or update.get("edited_message")
+                   or update.get("channel_post") or {})
+        chat = message.get("chat") or {}
+        if chat.get("id") is not None:
+            chats[chat["id"]] = chat
+    return list(chats.values())
+
+
 def check_credentials(cfg: dict) -> tuple[bool, str]:
     """Used by `rentwatch telegram-test` and the settings page."""
-    if not cfg.get("bot_token"):
+    token = cfg.get("bot_token")
+    if not token:
         return False, "Nessun bot_token impostato."
-    me = call(cfg["bot_token"], "getMe", {})
-    if not me:
-        return False, "Token rifiutato da Telegram."
+    ok, me = request(token, "getMe", {})
+    if not ok:
+        return False, f"Token rifiutato da Telegram: {me}"
+    name = f"@{me.get('username')}"
     if not cfg.get("chat_id"):
-        return False, f"Bot @{me.get('username')} ok, ma manca chat_id."
-    if send_message(cfg, f"✅ rentwatch è collegato a @{me.get('username')}."):
-        return True, f"Messaggio di prova inviato da @{me.get('username')}."
-    return False, f"Bot @{me.get('username')} ok, ma l'invio al chat_id è fallito."
+        return False, f"Bot {name} ok, ma manca chat_id."
+
+    ok, error = request(token, "sendMessage", {
+        "chat_id": cfg["chat_id"],
+        "text": f"✅ rentwatch è collegato a {name}.",
+    })
+    if ok:
+        return True, f"Messaggio di prova inviato da {name}."
+
+    # "chat not found" is nearly always the same thing: a bot cannot open a
+    # conversation, so the chat does not exist until you write to it first.
+    hint = ""
+    if "chat not found" in str(error).lower():
+        candidates = known_chats(token)
+        if candidates:
+            hint = (" Chat che hanno scritto al bot: "
+                    + ", ".join(f"{c['id']} ({c.get('type')})" for c in candidates)
+                    + ". Usa quello 'private' per i messaggi diretti.")
+        else:
+            hint = (f" Apri {name} su Telegram e premi Start (o mandagli un "
+                    "messaggio), poi riprova: un bot non può scrivere per primo. "
+                    "Per un canale, aggiungi il bot come amministratore.")
+    return False, f"Bot {name} ok, ma l'invio a chat_id={cfg['chat_id']} è fallito: {error}.{hint}"
 
 
 # ── what deserves a message ──────────────────────────────────────────────────

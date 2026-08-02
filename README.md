@@ -103,8 +103,14 @@ pagina **Impostazioni** della dashboard, che scrive lei `config.local.toml`.
 ### Telegram (opzionale)
 
 1. Crea un bot con [@BotFather](https://t.me/BotFather) e prendi il token.
-2. Scrivi al bot, poi recupera il tuo chat id da [@userinfobot](https://t.me/userinfobot).
-3. Incollali nella pagina Impostazioni e premi "invia messaggio di prova",
+2. **Apri il bot su Telegram e premi Start.** Un bot non può scrivere per
+   primo: finché non gli mandi un messaggio, la chat non esiste e l'invio
+   risponde `chat not found`.
+3. Ricava il chat id con `python -m rentwatch telegram-chat-id`, che elenca le
+   chat che hanno scritto al bot leggendole dall'API. Un id `private` è
+   positivo (messaggi diretti a te); canali e gruppi sono negativi e iniziano
+   con `-100`, e lì il bot va aggiunto come amministratore.
+4. Incollali nella pagina Impostazioni e premi "invia messaggio di prova",
    oppure a mano in `config.local.toml`:
 
 ```toml

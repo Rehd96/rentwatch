@@ -252,13 +252,23 @@ Now open https://labustagialla.it/case/ in a browser and log in.
    notifiche Telegram", press "Invia messaggio di prova".
 
 CHECK: the test message arrives on your phone. If it does not, the page tells
-you which half failed — bad token, or good token but wrong chat id. (A bot
-cannot message you until you have sent it something first: open the chat and
-press Start.)
+you which half failed — bad token, or good token but wrong chat id.
 
 Same thing from the shell, if you would rather:
 
 cd /root/Immobiliare_homes && ./.venv/bin/python -m rentwatch telegram-test
+
+"Bad Request: chat not found"
+    A bot cannot open a conversation — the chat does not exist until you write
+    to it. Open the bot on Telegram, press Start, then ask Telegram what your
+    id actually is:
+
+        ./.venv/bin/python -m rentwatch telegram-chat-id
+
+    It lists every chat that has messaged the bot, straight from the API, so a
+    typo cannot survive it. Take the one marked `private` for direct messages.
+    A private id is a positive number; a channel or group is negative and
+    starts with -100, and there the bot must also be an administrator.
 
 WHAT YOU CAN TUNE ON THAT PAGE
   - the search itself: price cap, minimum m², rooms, extra immobiliare.it

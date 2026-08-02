@@ -118,6 +118,37 @@ def cmd_telegram_test(cfg: dict, args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_telegram_chat_id(cfg: dict, args: argparse.Namespace) -> int:
+    """Ask Telegram which chats have written to the bot, and what their ids are."""
+    tg = cfg.get("telegram", {})
+    token = tg.get("bot_token")
+    if not token:
+        print("Nessun bot_token impostato.")
+        return 1
+
+    me = notify.call(token, "getMe", {})
+    if not me:
+        print("Token rifiutato da Telegram.")
+        return 1
+    print(f"Bot: @{me.get('username')}")
+    print(f"chat_id configurato: {tg.get('chat_id') or '(nessuno)'}\n")
+
+    chats = notify.known_chats(token)
+    if not chats:
+        print(f"Nessun messaggio ricevuto. Apri @{me.get('username')} su Telegram,")
+        print("premi Start, poi rilancia questo comando.")
+        print("(Un bot non può scrivere per primo: la chat non esiste finché")
+        print(" non gli scrivi tu. Per un canale, aggiungilo come amministratore.)")
+        return 1
+
+    for chat in chats:
+        who = chat.get("username") or chat.get("title") or chat.get("first_name") or ""
+        mark = "  <-- questo, per i messaggi diretti" if chat.get("type") == "private" else ""
+        print(f"  {chat['id']:<16} {chat.get('type', '?'):<10} {who}{mark}")
+    print("\nIncolla l'id nella pagina impostazioni, oppure in config.local.toml.")
+    return 0
+
+
 def cmd_bot(cfg: dict, args: argparse.Namespace) -> int:
     from .bot import run
 
@@ -148,6 +179,8 @@ def main() -> int:
                       help="non-interactive; note it lands in your shell history")
 
     sub.add_parser("telegram-test", help="verify the bot token and chat id")
+    sub.add_parser("telegram-chat-id",
+                   help="list the chats that have written to the bot, with their ids")
     sub.add_parser("bot", help="answer Telegram commands (long-poll loop)")
 
     args = parser.parse_args()
@@ -159,6 +192,7 @@ def main() -> int:
         "serve": cmd_serve,
         "set-password": cmd_set_password,
         "telegram-test": cmd_telegram_test,
+        "telegram-chat-id": cmd_telegram_chat_id,
         "bot": cmd_bot,
     }
     if args.command in commands:
