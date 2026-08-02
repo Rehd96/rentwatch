@@ -163,14 +163,45 @@ pagina **Impostazioni** della dashboard, che scrive lei `config.local.toml`.
 4. Incollali nella pagina Impostazioni e premi "invia messaggio di prova",
    oppure a mano in `config.local.toml`:
 
+### Notifiche a più persone
+
+Ogni destinatario riceve tutte le notifiche. Chi deve riceverle apre il bot e
+preme **Start** una volta — un bot non può scrivere per primo — poi:
+
+```bash
+.venv/bin/python -m rentwatch telegram-chat-id                     # gli id
+.venv/bin/python -m rentwatch telegram-add-chat --chat-id 222 --user elena
+.venv/bin/python -m rentwatch telegram-test                        # prova, uno per uno
+```
+
+Dalla pagina Impostazioni c'è la stessa cosa, col pulsante "Chi ha scritto al
+bot?" che propone gli id senza doverli copiare a mano.
+
+`--user` è facoltativo: collega la chat a un account della dashboard, così
+`/preferiti miei` risponde con i preferiti di chi ha scritto. In alternativa a
+due chat separate si può usare **un gruppo** con dentro entrambi e il bot: vale
+come destinatario singolo, con id negativo.
+
+`telegram-test` prova ogni destinatario separatamente e dice chi non ha
+ricevuto: con due persone configurate, "ha funzionato" non serve a niente se il
+messaggio è arrivato a una sola. Allo stesso modo una chat rotta non blocca
+l'invio agli altri.
+
 ```toml
 [telegram]
 enabled = true
 bot_token = "…"
-chat_id = "…"
 quiet_hours_start = 23     # niente messaggi di notte: restano in coda
 quiet_hours_end = 8
 template = "🏠 {title}\n💶 {price} · {surface}{ppm2}\n📍 {zone}\n{url}"
+
+[[telegram.recipients]]
+chat_id = "111111"
+user = "ion"
+
+[[telegram.recipients]]
+chat_id = "222222"
+user = "elena"
 
 [telegram.filters]
 price_max = 900            # notifica solo sotto questa soglia
@@ -181,7 +212,8 @@ zones = ["Vanchiglia", "San Salvario"]
 I filtri valgono **solo per le notifiche**: la dashboard continua a mostrare
 tutto il mercato. Con `python -m rentwatch bot` attivo puoi anche chiedere le
 cose dal telefono: `/stato`, `/ultimi`, `/preferiti`, `/filtri`, `/prezzo 850`,
-`/silenzia`. Il bot risponde soltanto al `chat_id` configurato.
+`/silenzia`. Il bot risponde soltanto alle chat elencate nei destinatari:
+chiunque altro trovi il bot viene ignorato.
 
 ## Come funziona
 

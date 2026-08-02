@@ -322,6 +322,29 @@ Now open https://labustagialla.it/case/ in a browser and log in.
 4. Open https://labustagialla.it/case/settings, paste both, tick "Invia
    notifiche Telegram", press "Invia messaggio di prova".
 
+NOTIFYING BOTH OF YOU
+
+Everyone on the recipients list gets every notification. The second person
+opens the same bot on their own phone and presses Start — a bot cannot write
+first, so until they do, Telegram answers "chat not found" — then:
+
+./.venv/bin/python -m rentwatch telegram-chat-id     # their id now shows up
+./.venv/bin/python -m rentwatch telegram-add-chat --chat-id <id> --user elena
+./.venv/bin/python -m rentwatch telegram-test
+systemctl restart rentwatch-bot                      # only if STEP 10 is installed
+
+CHECK: telegram-test names each recipient separately — "inviato a: ion, elena".
+It tests them one by one on purpose: with two people configured, "it worked" is
+useless if only one of them got the message.
+
+--user is optional and links the chat to a dashboard account, so "/preferiti
+miei" knows whose favourites to show. A group chat also works as a single
+recipient (negative id, bot added as a member) if you would rather share one
+conversation than have two.
+
+The same thing is on the settings page, with a "Chi ha scritto al bot?" button
+that lists the candidate ids so nothing has to be typed from memory.
+
 CHECK: the test message arrives on your phone. If it does not, the page tells
 you which half failed — bad token, or good token but wrong chat id.
 

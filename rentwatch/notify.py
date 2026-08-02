@@ -68,18 +68,42 @@ def call(token: str, method: str, payload: dict, timeout: int = 20) -> dict | No
     return result if ok else None
 
 
+def recipients(cfg: dict) -> list[dict]:
+    return [r for r in (cfg.get("recipients") or []) if r.get("chat_id")]
+
+
+def chat_ids(cfg: dict) -> list[str]:
+    return [str(r["chat_id"]) for r in recipients(cfg)]
+
+
 def send_message(cfg: dict, text: str, chat_id: str | None = None,
                  preview: bool = True) -> bool:
-    chat = chat_id or cfg.get("chat_id")
-    if not cfg.get("bot_token") or not chat:
-        log.warning("telegram: bot_token/chat_id missing")
+    """Send to one chat, or to every recipient when chat_id is not given.
+
+    True if it reached at least one person: one blocked or deleted chat should
+    not report the whole notification as failed for everybody else.
+    """
+    if not cfg.get("bot_token"):
+        log.warning("telegram: no bot_token")
         return False
-    result = call(cfg["bot_token"], "sendMessage", {
-        "chat_id": chat,
-        "text": text,
-        "disable_web_page_preview": not preview,
-    })
-    return result is not None
+
+    targets = [str(chat_id)] if chat_id else chat_ids(cfg)
+    if not targets:
+        log.warning("telegram: no recipients configured")
+        return False
+
+    delivered = 0
+    for target in targets:
+        ok, error = request(cfg["bot_token"], "sendMessage", {
+            "chat_id": target,
+            "text": text,
+            "disable_web_page_preview": not preview,
+        })
+        if ok:
+            delivered += 1
+        else:
+            log.warning("telegram: delivery to %s failed: %s", target, error)
+    return delivered > 0
 
 
 def known_chats(token: str) -> list[dict]:
@@ -100,7 +124,11 @@ def known_chats(token: str) -> list[dict]:
 
 
 def check_credentials(cfg: dict) -> tuple[bool, str]:
-    """Used by `rentwatch telegram-test` and the settings page."""
+    """Used by `rentwatch telegram-test` and the settings page.
+
+    Tests every recipient separately: with two people configured, "it worked"
+    is not useful if only one of them got the message.
+    """
     token = cfg.get("bot_token")
     if not token:
         return False, "Nessun bot_token impostato."
@@ -108,30 +136,38 @@ def check_credentials(cfg: dict) -> tuple[bool, str]:
     if not ok:
         return False, f"Token rifiutato da Telegram: {me}"
     name = f"@{me.get('username')}"
-    if not cfg.get("chat_id"):
-        return False, f"Bot {name} ok, ma manca chat_id."
 
-    ok, error = request(token, "sendMessage", {
-        "chat_id": cfg["chat_id"],
-        "text": f"✅ rentwatch è collegato a {name}.",
-    })
-    if ok:
-        return True, f"Messaggio di prova inviato da {name}."
+    targets = recipients(cfg)
+    if not targets:
+        return False, f"Bot {name} ok, ma non c'è nessun destinatario."
+
+    good, bad = [], []
+    for target in targets:
+        label = target.get("user") or target["chat_id"]
+        ok, error = request(token, "sendMessage", {
+            "chat_id": target["chat_id"],
+            "text": f"✅ rentwatch è collegato a {name}.",
+        })
+        (good if ok else bad).append(label if ok else f"{label} ({error})")
+
+    if not bad:
+        return True, f"Messaggio di prova inviato da {name} a: {', '.join(good)}."
 
     # "chat not found" is nearly always the same thing: a bot cannot open a
     # conversation, so the chat does not exist until you write to it first.
     hint = ""
-    if "chat not found" in str(error).lower():
+    if any("chat not found" in b.lower() for b in bad):
         candidates = known_chats(token)
         if candidates:
             hint = (" Chat che hanno scritto al bot: "
                     + ", ".join(f"{c['id']} ({c.get('type')})" for c in candidates)
-                    + ". Usa quello 'private' per i messaggi diretti.")
+                    + ".")
         else:
-            hint = (f" Apri {name} su Telegram e premi Start (o mandagli un "
-                    "messaggio), poi riprova: un bot non può scrivere per primo. "
-                    "Per un canale, aggiungi il bot come amministratore.")
-    return False, f"Bot {name} ok, ma l'invio a chat_id={cfg['chat_id']} è fallito: {error}.{hint}"
+            hint = (f" Chi non riceve deve aprire {name} su Telegram e premere "
+                    "Start: un bot non può scrivere per primo. Per un gruppo, "
+                    "aggiungi il bot come membro.")
+    prefix = f"Inviato a {', '.join(good)}. " if good else ""
+    return False, f"{prefix}Non consegnato a: {'; '.join(bad)}.{hint}"
 
 
 # ── what deserves a message ──────────────────────────────────────────────────
@@ -226,8 +262,8 @@ def notify(conn, cfg: dict, new_listings: list[dict],
     """
     if not cfg.get("enabled"):
         return 0
-    if not cfg.get("bot_token") or not cfg.get("chat_id"):
-        log.warning("telegram enabled but bot_token/chat_id missing")
+    if not cfg.get("bot_token") or not recipients(cfg):
+        log.warning("telegram enabled but bot_token or recipients missing")
         return 0
 
     filters = cfg.get("filters") or {}

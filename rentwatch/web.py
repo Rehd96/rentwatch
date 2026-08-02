@@ -348,7 +348,12 @@ def create_app(cfg: dict) -> FastAPI:
             "telegram": {
                 "enabled": tg.get("enabled", False),
                 "bot_token_set": bool(tg.get("bot_token")),
-                "chat_id": tg.get("chat_id", ""),
+                "recipients": [
+                    {"chat_id": str(r.get("chat_id", "")), "user": r.get("user", "")}
+                    for r in tg.get("recipients") or []
+                ],
+                "users": [u.get("username", "")
+                          for u in cfg.get("auth", {}).get("users") or []],
                 "max_per_run": tg.get("max_per_run", 20),
                 "quiet_hours_start": tg.get("quiet_hours_start", 23),
                 "quiet_hours_end": tg.get("quiet_hours_end", 8),
@@ -367,7 +372,14 @@ def create_app(cfg: dict) -> FastAPI:
         tg = cfg.setdefault("telegram", {})
 
         tg["enabled"] = bool(tg_in.get("enabled"))
-        tg["chat_id"] = str(tg_in.get("chat_id", "")).strip()
+        seen, people = set(), []
+        for entry in tg_in.get("recipients") or []:
+            chat = str(entry.get("chat_id", "")).strip()
+            if chat and chat not in seen:      # the same chat twice = two messages
+                seen.add(chat)
+                people.append({"chat_id": chat,
+                               "user": str(entry.get("user", "")).strip()})
+        tg["recipients"] = people
         tg["template"] = tg_in.get("template") or notify.DEFAULT_TEMPLATE
         tg["max_per_run"] = max(1, min(100, int(tg_in.get("max_per_run") or 20)))
         tg["quiet_hours_start"] = int(tg_in.get("quiet_hours_start") or 0) % 24
@@ -415,10 +427,29 @@ def create_app(cfg: dict) -> FastAPI:
         probe = dict(cfg.get("telegram", {}))
         if payload.get("bot_token"):
             probe["bot_token"] = payload["bot_token"].strip()
-        if payload.get("chat_id"):
-            probe["chat_id"] = str(payload["chat_id"]).strip()
+        # Test what is on screen, not what was last saved — otherwise you have
+        # to save a chat id before you can find out whether it works.
+        if payload.get("recipients"):
+            probe["recipients"] = [
+                {"chat_id": str(r.get("chat_id", "")).strip(),
+                 "user": str(r.get("user", "")).strip()}
+                for r in payload["recipients"] if str(r.get("chat_id", "")).strip()
+            ]
         ok, message = notify.check_credentials(probe)
         return {"ok": ok, "message": message}
+
+    @app.get("/api/telegram-chats")
+    def telegram_chats():
+        """Chats that have written to the bot — how you find a chat id without
+        typing one from memory."""
+        token = cfg.get("telegram", {}).get("bot_token")
+        if not token:
+            return {"chats": [], "error": "nessun bot_token impostato"}
+        return {"chats": [
+            {"id": str(c["id"]), "type": c.get("type", ""),
+             "name": c.get("username") or c.get("title") or c.get("first_name") or ""}
+            for c in notify.known_chats(token)
+        ]}
 
     # ── run a scrape now ─────────────────────────────────────────────────────
 

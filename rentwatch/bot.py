@@ -25,7 +25,7 @@ HELP = """Comandi disponibili:
 
 /stato — ultimo scrape, annunci attivi, coda
 /ultimi [n] — ultimi annunci trovati (default 5)
-/preferiti [nome] — annunci col cuore, di tutti o di una persona
+/preferiti [nome|miei] — annunci col cuore, di tutti o di una persona
 /filtri — filtri di notifica attivi
 /prezzo <euro> — cambia il prezzo massimo delle notifiche
 /superficie <m2> — cambia la superficie minima
@@ -198,7 +198,18 @@ COMMANDS = {
 }
 
 
-def handle(cfg: dict, conn, text: str) -> str | None:
+def user_for_chat(cfg: dict, chat_id: str | None) -> str:
+    """The dashboard account linked to this Telegram chat, if any.
+
+    Lets "/preferiti miei" mean something when two people share the bot.
+    """
+    for recipient in (cfg.get("telegram", {}).get("recipients") or []):
+        if str(recipient.get("chat_id")) == str(chat_id):
+            return recipient.get("user") or ""
+    return ""
+
+
+def handle(cfg: dict, conn, text: str, chat_id: str | None = None) -> str | None:
     if not text.startswith("/"):
         return None
     parts = text[1:].split()
@@ -208,8 +219,14 @@ def handle(cfg: dict, conn, text: str) -> str | None:
     handler = COMMANDS.get(name)
     if not handler:
         return f"Comando sconosciuto: /{name}\n\n{HELP}"
+    args = parts[1:]
+    # "miei" resolves to whoever is asking, so neither person has to remember
+    # the exact spelling of their own account name.
+    me = user_for_chat(cfg, chat_id)
+    if args and args[0].lower() in ("miei", "mie", "mio"):
+        args = [me] if me else []
     try:
-        return handler(cfg, conn, parts[1:])
+        return handler(cfg, conn, args)
     except Exception as e:                  # a broken command must not kill the loop
         log.exception("command /%s failed", name)
         return f"⚠️ Errore nell'eseguire /{name}: {e}"
@@ -223,14 +240,14 @@ def run(cfg: dict) -> int:
     if not token:
         log.error("no bot_token configured — nothing to poll")
         return 1
-    allowed = str(tg.get("chat_id") or "")
+    allowed = set(notify.chat_ids(tg))
     if not allowed:
-        log.error("no chat_id configured — refusing to answer every chat")
+        log.error("no recipients configured — refusing to answer every chat")
         return 1
 
     me = notify.call(token, "getMe", {})
-    log.info("bot @%s listening (only chat %s is answered)",
-             (me or {}).get("username", "?"), allowed)
+    log.info("bot @%s listening (only chats %s are answered)",
+             (me or {}).get("username", "?"), ", ".join(sorted(allowed)))
     notify.call(token, "setMyCommands", {"commands": [
         {"command": name, "description": name}
         for name in ("stato", "ultimi", "preferiti", "filtri", "silenzia",
@@ -253,16 +270,18 @@ def run(cfg: dict) -> int:
             text = (message.get("text") or "").strip()
             if not text:
                 continue
-            if chat_id != allowed:
+            # Re-read config each time: the dashboard may have changed it, and
+            # a stale token here would silently stop answering. It also means a
+            # recipient added a minute ago can talk to the bot straight away.
+            live = load_config()
+            allowed = set(notify.chat_ids(live["telegram"])) or allowed
+            if chat_id not in allowed:
                 log.warning("ignoring message from unauthorised chat %s", chat_id)
                 continue
 
-            # Re-read config each time: the dashboard may have changed it, and
-            # a stale token here would silently stop answering.
-            live = load_config()
             conn = db.connect(live["db_path"])
             try:
-                reply = handle(live, conn, text)
+                reply = handle(live, conn, text, chat_id=chat_id)
             finally:
                 conn.close()
             if reply:

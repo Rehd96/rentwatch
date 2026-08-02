@@ -192,7 +192,14 @@ def cmd_telegram_chat_id(cfg: dict, args: argparse.Namespace) -> int:
         print("Token rifiutato da Telegram.")
         return 1
     print(f"Bot: @{me.get('username')}")
-    print(f"chat_id configurato: {tg.get('chat_id') or '(nessuno)'}\n")
+    current = notify.recipients(tg)
+    if current:
+        print("Destinatari configurati:")
+        for r in current:
+            print(f"  {r['chat_id']:<16} {r.get('user') or ''}")
+    else:
+        print("Destinatari configurati: (nessuno)")
+    print()
 
     chats = notify.known_chats(token)
     if not chats:
@@ -202,11 +209,66 @@ def cmd_telegram_chat_id(cfg: dict, args: argparse.Namespace) -> int:
         print(" non gli scrivi tu. Per un canale, aggiungilo come amministratore.)")
         return 1
 
+    known = {r["chat_id"] for r in current}
+    print("Chat che hanno scritto al bot:")
     for chat in chats:
         who = chat.get("username") or chat.get("title") or chat.get("first_name") or ""
-        mark = "  <-- questo, per i messaggi diretti" if chat.get("type") == "private" else ""
+        mark = " (già destinatario)" if str(chat["id"]) in known else ""
         print(f"  {chat['id']:<16} {chat.get('type', '?'):<10} {who}{mark}")
-    print("\nIncolla l'id nella pagina impostazioni, oppure in config.local.toml.")
+    print("\nPer aggiungerne uno:")
+    print("  python -m rentwatch telegram-add-chat --chat-id <id> [--user <account>]")
+    return 0
+
+
+def cmd_telegram_add_chat(cfg: dict, args: argparse.Namespace) -> int:
+    """Add a recipient. Everyone on the list gets every notification."""
+    from .settings_store import save_config
+
+    tg = cfg.setdefault("telegram", {})
+    people = tg.setdefault("recipients", [])
+    chat_id = str(args.chat_id or input("Chat id: ")).strip()
+    if not chat_id:
+        print("Serve un chat id.", file=sys.stderr)
+        return 1
+
+    if args.user:
+        known = [u["username"] for u in cfg.get("auth", {}).get("users") or []]
+        if known and args.user not in known:
+            print(f"Nessun account '{args.user}'. Ci sono: {', '.join(known)}",
+                  file=sys.stderr)
+            return 1
+
+    existing = next((r for r in people if str(r.get("chat_id")) == chat_id), None)
+    if existing:
+        existing["user"] = args.user or existing.get("user", "")
+        action = "aggiornato"
+    else:
+        people.append({"chat_id": chat_id, "user": args.user or ""})
+        action = "aggiunto"
+
+    save_config(cfg, args.config)
+    print(f"Destinatario {action}: {chat_id}"
+          + (f" → {args.user}" if args.user else ""))
+    print(f"Ora sono {len(people)}: "
+          + ", ".join(f"{r['chat_id']}{'/' + r['user'] if r.get('user') else ''}"
+                      for r in people))
+    print("Verifica con: python -m rentwatch telegram-test")
+    return 0
+
+
+def cmd_telegram_remove_chat(cfg: dict, args: argparse.Namespace) -> int:
+    from .settings_store import save_config
+
+    tg = cfg.setdefault("telegram", {})
+    people = tg.setdefault("recipients", [])
+    chat_id = str(args.chat_id or input("Chat id da rimuovere: ")).strip()
+    remaining = [r for r in people if str(r.get("chat_id")) != chat_id]
+    if len(remaining) == len(people):
+        print(f"Nessun destinatario '{chat_id}'.", file=sys.stderr)
+        return 1
+    tg["recipients"] = remaining
+    save_config(cfg, args.config)
+    print(f"Rimosso {chat_id}. Restano {len(remaining)} destinatari.")
     return 0
 
 
@@ -248,6 +310,16 @@ def main() -> int:
     sub.add_parser("telegram-test", help="verify the bot token and chat id")
     sub.add_parser("telegram-chat-id",
                    help="list the chats that have written to the bot, with their ids")
+
+    p_add = sub.add_parser("telegram-add-chat",
+                           help="add someone to the notification recipients")
+    p_add.add_argument("--chat-id", default=None)
+    p_add.add_argument("--user", default=None,
+                       help="dashboard account this chat belongs to (optional)")
+
+    p_rmchat = sub.add_parser("telegram-remove-chat",
+                              help="stop notifying a chat")
+    p_rmchat.add_argument("--chat-id", default=None)
     sub.add_parser("bot", help="answer Telegram commands (long-poll loop)")
 
     args = parser.parse_args()
@@ -262,6 +334,8 @@ def main() -> int:
         "remove-user": cmd_remove_user,
         "telegram-test": cmd_telegram_test,
         "telegram-chat-id": cmd_telegram_chat_id,
+        "telegram-add-chat": cmd_telegram_add_chat,
+        "telegram-remove-chat": cmd_telegram_remove_chat,
         "bot": cmd_bot,
     }
     if args.command in commands:

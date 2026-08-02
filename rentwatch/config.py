@@ -34,7 +34,10 @@ DEFAULTS = {
     "telegram": {
         "enabled": False,
         "bot_token": "",
-        "chat_id": "",
+        # One [[telegram.recipients]] block per person, each with chat_id and
+        # optionally the dashboard account it belongs to. A group chat is just
+        # another chat_id — negative, and the bot must be a member.
+        "recipients": [],
         "max_per_run": 20,
         # Nothing is sent between these hours (local time); the listings are
         # held back and go out with the first run after the window.
@@ -94,6 +97,30 @@ def _normalise_auth(auth: dict) -> dict:
     return auth
 
 
+def _normalise_telegram(tg: dict) -> dict:
+    """One recipients list, whatever spelling the config uses.
+
+    There was a single `chat_id` before notifications went to more than one
+    person. Same treatment as the accounts: fold it in, drop the legacy key,
+    and let the next save write the new shape.
+    """
+    recipients = []
+    for entry in tg.get("recipients") or []:
+        if isinstance(entry, dict) and str(entry.get("chat_id") or "").strip():
+            recipients.append({"chat_id": str(entry["chat_id"]).strip(),
+                               "user": (entry.get("user") or "").strip()})
+        elif isinstance(entry, (str, int)) and str(entry).strip():
+            # Plain list of ids is a reasonable thing to hand-write.
+            recipients.append({"chat_id": str(entry).strip(), "user": ""})
+
+    legacy = str(tg.pop("chat_id", "") or "").strip()
+    if legacy and not any(r["chat_id"] == legacy for r in recipients):
+        recipients.insert(0, {"chat_id": legacy, "user": ""})
+
+    tg["recipients"] = recipients
+    return tg
+
+
 def load_config(path: str | Path | None = None) -> dict:
     """Load config.toml; config.local.toml (gitignored) wins if present."""
     if path is None:
@@ -103,6 +130,7 @@ def load_config(path: str | Path | None = None) -> dict:
 
     _fill(cfg, DEFAULTS)
     _normalise_auth(cfg["auth"])
+    _normalise_telegram(cfg["telegram"])
     if not cfg.get("searches"):
         cfg["searches"] = [dict(s) for s in DEFAULTS["searches"]]
     for search in cfg["searches"]:

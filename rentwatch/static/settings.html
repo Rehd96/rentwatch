@@ -102,11 +102,16 @@
         <input type="password" id="tg-token" placeholder="lascia vuoto per non cambiarlo"
                autocomplete="new-password">
       </div>
-      <div class="field">
-        <label for="tg-chat">Chat id</label>
-        <input type="text" id="tg-chat" inputmode="numeric">
-      </div>
     </div>
+
+    <p class="hint" style="margin-bottom:6px">Destinatari — ognuno riceve tutte le
+      notifiche. Ogni persona deve prima aprire il bot e premere <b>Start</b>:
+      un bot non può scrivere per primo. Un gruppo funziona come destinatario
+      singolo (id negativo, col bot dentro).</p>
+    <div id="recipients"></div>
+    <button type="button" id="add-recipient">+ aggiungi destinatario</button>
+    <button type="button" id="find-chats">Chi ha scritto al bot?</button>
+    <div id="chat-candidates" class="hint"></div>
     <div class="row">
       <div class="field">
         <label for="tg-quiet-start">Silenzio dalle</label>
@@ -200,6 +205,34 @@ function msg(text, kind) {
   el.className = "msg " + (kind || "");
 }
 
+function recipientCard(recipient) {
+  const box = document.createElement("div");
+  box.className = "search";
+  box.innerHTML = `
+    <div class="row">
+      <div class="field"><label>Chat id</label>
+        <input type="text" class="r-chat" inputmode="numeric"></div>
+      <div class="field"><label>Account (facoltativo)</label>
+        <select class="r-user"></select></div>
+    </div>
+    <button type="button" class="del">rimuovi</button>`;
+  box.querySelector(".r-chat").value = recipient.chat_id || "";
+  const select = box.querySelector(".r-user");
+  const names = (state && state.telegram && state.telegram.users) || [];
+  select.innerHTML = `<option value="">— nessuno —</option>` +
+    names.map(n => `<option value="${n}">${n}</option>`).join("");
+  select.value = recipient.user || "";
+  box.querySelector(".del").onclick = () => box.remove();
+  return box;
+}
+
+function collectRecipients() {
+  return [...document.querySelectorAll("#recipients .search")].map(box => ({
+    chat_id: box.querySelector(".r-chat").value.trim(),
+    user: box.querySelector(".r-user").value,
+  })).filter(r => r.chat_id);
+}
+
 function searchCard(search) {
   const box = document.createElement("div");
   box.className = "search";
@@ -251,7 +284,11 @@ function fill(data) {
 
   const t = data.telegram || {};
   $("tg-enabled").checked = !!t.enabled;
-  $("tg-chat").value = t.chat_id || "";
+
+  const people = $("recipients");
+  people.innerHTML = "";
+  (t.recipients || []).forEach(r => people.appendChild(recipientCard(r)));
+
   $("tg-quiet-start").value = t.quiet_hours_start ?? 23;
   $("tg-quiet-end").value = t.quiet_hours_end ?? 8;
   $("tg-max").value = t.max_per_run ?? 20;
@@ -278,7 +315,7 @@ function payload() {
     telegram: {
       enabled: $("tg-enabled").checked,
       bot_token: $("tg-token").value,      // vuoto = non toccare quello salvato
-      chat_id: $("tg-chat").value,
+      recipients: collectRecipients(),
       quiet_hours_start: Number($("tg-quiet-start").value),
       quiet_hours_end: Number($("tg-quiet-end").value),
       max_per_run: Number($("tg-max").value),
@@ -327,12 +364,43 @@ $("save").onclick = async () => {
   }
 };
 
+$("add-recipient").onclick = () =>
+  $("recipients").appendChild(recipientCard({ chat_id: "", user: "" }));
+
+$("find-chats").onclick = async () => {
+  $("find-chats").disabled = true;
+  const box = $("chat-candidates");
+  box.textContent = "Chiedo a Telegram…";
+  try {
+    const r = await (await fetch(BASE + "api/telegram-chats")).json();
+    if (r.error) { box.textContent = r.error; return; }
+    if (!(r.chats || []).length) {
+      box.textContent = "Nessuno ha ancora scritto al bot. Apritelo su Telegram " +
+        "e premete Start, poi riprovate.";
+      return;
+    }
+    box.innerHTML = "Tocca per usarlo: " + r.chats.map(c =>
+      `<button type="button" class="pick" data-id="${c.id}">${c.id} (${c.type}${c.name ? " " + c.name : ""})</button>`
+    ).join(" ");
+    box.querySelectorAll(".pick").forEach(b => b.onclick = () => {
+      const empty = [...document.querySelectorAll("#recipients .r-chat")]
+        .find(i => !i.value.trim());
+      if (empty) { empty.value = b.dataset.id; }
+      else { $("recipients").appendChild(recipientCard({ chat_id: b.dataset.id })); }
+    });
+  } catch (e) {
+    box.textContent = "Errore: " + e.message;
+  } finally {
+    $("find-chats").disabled = false;
+  }
+};
+
 $("test").onclick = async () => {
   $("test").disabled = true;
   msg("Invio in corso…");
   try {
     const r = await post("api/telegram-test",
-      { bot_token: $("tg-token").value, chat_id: $("tg-chat").value });
+      { bot_token: $("tg-token").value, recipients: collectRecipients() });
     msg(r.message, r.ok ? "ok" : "err");
   } catch (e) {
     msg("Errore: " + e.message, "err");

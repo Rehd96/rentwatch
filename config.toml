@@ -36,12 +36,28 @@ secret_key = ""        # blank -> generated once into data/session_secret
 every_hours = 4
 
 [telegram]
-# Create a bot with @BotFather for the token; @userinfobot gives you the chat
-# id. Easiest from the dashboard: /settings, then "invia messaggio di prova".
+# Create a bot with @BotFather for the token. Easiest from the dashboard:
+# /settings, then "invia messaggio di prova".
 enabled = false
 bot_token = ""
-chat_id = ""
 max_per_run = 20
+
+# Destinatari: ognuno riceve tutte le notifiche. Ogni persona deve prima aprire
+# il bot e premere Start — un bot non può scrivere per primo. Un gruppo vale
+# come destinatario singolo: id negativo, e il bot dev'essere membro.
+#
+#   python -m rentwatch telegram-chat-id                  # trova gli id
+#   python -m rentwatch telegram-add-chat --chat-id 123 --user ion
+#
+# `user` è facoltativo e collega la chat a un account della dashboard, così
+# "/preferiti miei" sa di chi parlare.
+#
+# [[telegram.recipients]]
+# chat_id = "123456"
+# user = "ion"
+#
+# Il vecchio `chat_id = "..."` singolo continua a funzionare: viene convertito
+# in un destinatario al caricamento.
 
 # Nothing is sent between these hours (local time). Matches found inside the
 # window are queued, not dropped, and go out with the first run after it.

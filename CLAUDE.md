@@ -52,8 +52,15 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + login su
 - `rentwatch/notify.py` — Telegram: filtri, template, ore di silenzio, ribassi.
   In ore di silenzio le notifiche finiscono in `notify_queue` e partono al primo
   run utile — non si perdono.
-- `rentwatch/bot.py` — long-poll `getUpdates`, risponde **solo** al `chat_id`
-  configurato. Niente webhook, niente porte esposte.
+- `rentwatch/bot.py` — long-poll `getUpdates`, risponde **solo** alle chat in
+  `[[telegram.recipients]]`. Niente webhook, niente porte esposte. Rilegge il
+  config a ogni messaggio, così un destinatario appena aggiunto parla subito.
+- **Destinatari multipli**: `[[telegram.recipients]]` (`chat_id` + `user`
+  facoltativo che collega la chat a un account). `send_message()` senza
+  `chat_id` manda a tutti e torna True se almeno uno ha ricevuto — una chat
+  bloccata non deve far risultare fallita la notifica per gli altri.
+  `check_credentials()` prova ogni destinatario e dice chi non ha ricevuto.
+  `config._normalise_telegram()` converte il vecchio `chat_id` singolo.
 - `rentwatch/settings_store.py` — scrive `config.local.toml` dalla dashboard
   (mini-emitter TOML: `tomllib` legge ma non scrive, e tomli-w non vale una
   dipendenza in più). Scrittura atomica + `.bak`.
