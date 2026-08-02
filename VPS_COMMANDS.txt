@@ -31,6 +31,56 @@ BEFORE YOU START
 
 
 ───────────────────────────────────────────────────────────────────────────
+ WHERE AM I? — safe to run at any point, changes nothing
+───────────────────────────────────────────────────────────────────────────
+
+Steps can be done out of order and it is easy to lose track — telegram-test in
+STEP 9, for instance, works fine from a bare checkout with none of the services
+installed. This says which steps are actually done. Paste the whole thing.
+
+RW=/root/Immobiliare_homes
+u() { if [ -f /etc/systemd/system/$1 ]; then systemctl is-active $1; else echo "not installed"; fi; }
+if [ ! -d "$RW" ]; then
+  echo "STEP 2  clone ........... NOT CLONED — start there"
+else
+  cd "$RW"
+  echo "STEP 2  clone ........... ok, at $(git rev-parse --short HEAD 2>/dev/null)"
+  if [ -f config.local.toml ] && grep -q 'password_hash = "pbkdf2' config.local.toml
+    then echo "STEP 3  password ....... set"
+    else echo "STEP 3  password ....... NOT SET"; fi
+  if [ -f data/rentwatch.db ]
+    then echo "STEP 4  database ....... $(./.venv/bin/python -c "import sqlite3;print(sqlite3.connect('data/rentwatch.db').execute('SELECT COUNT(*) FROM listings').fetchone()[0])" 2>/dev/null) annunci"
+    else echo "STEP 4  database ....... none yet"; fi
+  echo "STEP 5  web service .... $(u rentwatch-web.service)"
+  echo "STEP 6  scrape timer ... $(u rentwatch-scrape.timer)"
+  echo "STEP 7  nginx /case/ ... $(nginx -T 2>/dev/null | grep -cE 'location[[:space:]]*=?[[:space:]]*/case') of 2 blocks"
+  echo "STEP 8  from outside ... $(curl -so /dev/null -w '%{http_code}' https://labustagialla.it/case/login), want 200"
+  if [ -f config.local.toml ] && grep -qE '^bot_token = ".+"' config.local.toml
+    then echo "STEP 9  telegram ....... token set"
+    else echo "STEP 9  telegram ....... no token"; fi
+  echo "STEP 10 command bot .... $(u rentwatch-bot.service)"
+fi
+
+READING IT
+  STEP 7 counts two blocks: `location /case/` and `location = /case`. Grepping
+  for the plain string "location /case" finds only the first — the second
+  reads "location = /case" — so a loose grep undercounts and says 1.
+  STEP 8 says 200 once nginx is wired up; 404 means the /case/ block is
+  missing, 502 means nginx is there but the web service is not running.
+  "not installed" for a unit means the file was never copied into
+  /etc/systemd/system/; `systemctl is-active` alone cannot tell you that —
+  it answers "inactive" for a unit that does not exist at all.
+
+TWO THINGS THAT SURPRISE PEOPLE
+  - A valid Telegram token sends nothing on its own. Notifications come from
+    the scrape, so nothing fires until STEP 6 is enabled — and the first full
+    run is deliberately silent (the whole market would arrive at once), so real
+    messages start from the second run, about four hours later.
+  - Notifications and the /stato commands are different services. The token
+    alone does not make the bot listen; that is rentwatch-bot in STEP 10.
+
+
+───────────────────────────────────────────────────────────────────────────
  STEP 1 — PRE-FLIGHT
 ───────────────────────────────────────────────────────────────────────────
 
