@@ -1,16 +1,34 @@
-"""Local dashboard: FastAPI serving a single-page overview of the listings DB."""
+"""Dashboard: FastAPI serving a single-page overview of the listings DB.
 
+Everything behind a session cookie. The gate is a middleware rather than a
+per-route dependency so that a route added later is protected by default —
+forgetting to log in is a nuisance, forgetting to guard an endpoint publishes
+where you are about to live.
+"""
+
+import logging
 import sqlite3
 import statistics
+import subprocess
+import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import parse_qs
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from . import db
+from . import auth, db, notify
+from .config import PROJECT_ROOT
+from .settings_store import save_config
+
+log = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Reachable without a session. Everything else needs the cookie.
+PUBLIC_PATHS = {"/login", "/healthz"}
 
 
 def _connect(db_path: str) -> sqlite3.Connection:
@@ -24,14 +42,141 @@ def _days_since(iso: str) -> int:
     return (datetime.now(timezone.utc) - dt).days
 
 
+def _page(name: str, base: str) -> HTMLResponse:
+    """Serve a static page with its base URL baked in, so the same files work
+    at the domain root locally and under /case/ on the VPS."""
+    html = (STATIC_DIR / name).read_text(encoding="utf-8").replace("__BASE__", base)
+    return HTMLResponse(html)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "?"
+
+
 def create_app(cfg: dict) -> FastAPI:
-    app = FastAPI(title="rentwatch")
+    app = FastAPI(title="rentwatch", docs_url=None, redoc_url=None)
     db_path = cfg["db_path"]
     db.connect(db_path).close()  # ensure schema/migrations before serving
 
+    auth_cfg = cfg.get("auth", {})
+    auth_enabled = bool(auth_cfg.get("enabled", True))
+    secret = auth.get_secret_key(cfg)
+    throttle = auth.LoginThrottle()
+
+    if auth_enabled and not auth_cfg.get("password_hash"):
+        log.warning("auth is on but no password is set — the dashboard will "
+                    "refuse every login. Run: python -m rentwatch set-password")
+
+    def base_of(request: Request) -> str:
+        """URL prefix this app is mounted under, always ending in '/'."""
+        root = request.scope.get("root_path", "").rstrip("/")
+        return f"{root}/"
+
+    def app_path(request: Request) -> str:
+        """Path as the routes see it, with any mount prefix removed.
+
+        request.url.path keeps the root_path on it, so comparing it against
+        "/login" silently stops matching the moment the app is mounted under
+        /case/ — and the gate then redirects the login page to itself.
+        """
+        root = request.scope.get("root_path", "").rstrip("/")
+        path = request.scope.get("path") or request.url.path
+        if root and path.startswith(root):
+            path = path[len(root):] or "/"
+        return path
+
+    # ── the gate ─────────────────────────────────────────────────────────────
+
+    @app.middleware("http")
+    async def require_login(request: Request, call_next):
+        path = app_path(request)
+        if not auth_enabled or path in PUBLIC_PATHS:
+            return await call_next(request)
+
+        session = auth.read_token(secret, request.cookies.get(auth.COOKIE_NAME))
+        if session:
+            request.state.user = session.get("u")
+            return await call_next(request)
+
+        if path.startswith("/api/"):
+            return JSONResponse(status_code=401, content={"error": "login required"})
+        return RedirectResponse(f"{base_of(request)}login", status_code=303)
+
+    # ── login / logout ───────────────────────────────────────────────────────
+
+    def login_html(request: Request, error: str = "", status: int = 200) -> HTMLResponse:
+        html = ((STATIC_DIR / "login.html").read_text(encoding="utf-8")
+                .replace("__BASE__", base_of(request))
+                .replace("__ERROR__", error))
+        return HTMLResponse(html, status_code=status)
+
+    @app.get("/login")
+    def login_page(request: Request):
+        if auth.read_token(secret, request.cookies.get(auth.COOKIE_NAME)):
+            return RedirectResponse(base_of(request), status_code=303)
+        return login_html(request)
+
+    @app.post("/login")
+    async def login(request: Request):
+        # Parsed by hand instead of fastapi.Form: that would pull in
+        # python-multipart just to read two fields.
+        body = (await request.body()).decode("utf-8", "replace")
+        form = parse_qs(body)
+        username = (form.get("username") or [""])[0].strip()
+        password = (form.get("password") or [""])[0]
+
+        ip = _client_ip(request)
+        wait = throttle.locked_for(ip)
+        if wait:
+            return login_html(request,
+                              f"Troppi tentativi. Riprova tra {wait} secondi.", 429)
+
+        stored = auth_cfg.get("password_hash") or ""
+        ok = (username == auth_cfg.get("username", "ion")
+              and stored and auth.verify_password(password, stored))
+        if not ok:
+            throttle.record_failure(ip)
+            log.warning("failed login for %r from %s", username, ip)
+            return login_html(request, "Credenziali non valide.", 401)
+
+        throttle.reset(ip)
+        response = RedirectResponse(base_of(request), status_code=303)
+        response.set_cookie(
+            auth.COOKIE_NAME,
+            auth.make_token(secret, username),
+            max_age=auth.SESSION_TTL,
+            httponly=True,
+            samesite="lax",
+            secure=request.headers.get("x-forwarded-proto", request.url.scheme) == "https",
+            path=base_of(request),
+        )
+        return response
+
+    @app.get("/logout")
+    @app.post("/logout")
+    def logout(request: Request):
+        response = RedirectResponse(f"{base_of(request)}login", status_code=303)
+        response.delete_cookie(auth.COOKIE_NAME, path=base_of(request))
+        return response
+
+    @app.get("/healthz")
+    def healthz():
+        return {"ok": True}
+
+    # ── pages ────────────────────────────────────────────────────────────────
+
     @app.get("/")
-    def index():
-        return FileResponse(STATIC_DIR / "index.html")
+    def index(request: Request):
+        return _page("index.html", base_of(request))
+
+    @app.get("/settings")
+    def settings_page(request: Request):
+        return _page("settings.html", base_of(request))
+
+    # ── listings API ─────────────────────────────────────────────────────────
 
     @app.get("/api/listings")
     def listings(include_inactive: bool = False, include_hidden: bool = False):
@@ -101,8 +246,8 @@ def create_app(cfg: dict) -> FastAPI:
             )
 
             last_run = conn.execute(
-                "SELECT finished_at, listings_seen, new_listings, status FROM scrape_runs "
-                "ORDER BY id DESC LIMIT 1"
+                "SELECT started_at, finished_at, listings_seen, new_listings, status "
+                "FROM scrape_runs ORDER BY id DESC LIMIT 1"
             ).fetchone()
             return {
                 "active_count": len(active),
@@ -111,6 +256,9 @@ def create_app(cfg: dict) -> FastAPI:
                 "median_ppm2": round(statistics.median(ppm2), 1) if ppm2 else None,
                 "zones": zone_stats,
                 "last_run": dict(last_run) if last_run else None,
+                "every_hours": cfg.get("schedule", {}).get("every_hours", 4),
+                "queued_notifications": db.queue_size(conn)
+                if _has_table(conn, "notify_queue") else 0,
             }
         finally:
             conn.close()
@@ -149,8 +297,128 @@ def create_app(cfg: dict) -> FastAPI:
         finally:
             conn.close()
 
+    # ── settings ─────────────────────────────────────────────────────────────
+
+    @app.get("/api/settings")
+    def get_settings():
+        """The editable slice of the config. Secrets come back as a boolean
+        'is it set', never as text — a bot token in a GET response ends up in
+        browser history and proxy logs."""
+        tg = cfg.get("telegram", {})
+        return {
+            "searches": [
+                {"name": s.get("name", ""), "path": s.get("path", ""),
+                 "params": s.get("params", {})}
+                for s in cfg.get("searches", [])
+            ],
+            "schedule": cfg.get("schedule", {}),
+            "telegram": {
+                "enabled": tg.get("enabled", False),
+                "bot_token_set": bool(tg.get("bot_token")),
+                "chat_id": tg.get("chat_id", ""),
+                "max_per_run": tg.get("max_per_run", 20),
+                "quiet_hours_start": tg.get("quiet_hours_start", 23),
+                "quiet_hours_end": tg.get("quiet_hours_end", 8),
+                "notify_price_drops": tg.get("notify_price_drops", True),
+                "send_run_summary": tg.get("send_run_summary", False),
+                "template": tg.get("template", notify.DEFAULT_TEMPLATE),
+                "filters": tg.get("filters", {}),
+            },
+            "placeholders": notify.PLACEHOLDERS,
+        }
+
+    @app.post("/api/settings")
+    async def put_settings(request: Request):
+        payload = await request.json()
+        tg_in = payload.get("telegram", {})
+        tg = cfg.setdefault("telegram", {})
+
+        tg["enabled"] = bool(tg_in.get("enabled"))
+        tg["chat_id"] = str(tg_in.get("chat_id", "")).strip()
+        tg["template"] = tg_in.get("template") or notify.DEFAULT_TEMPLATE
+        tg["max_per_run"] = max(1, min(100, int(tg_in.get("max_per_run") or 20)))
+        tg["quiet_hours_start"] = int(tg_in.get("quiet_hours_start") or 0) % 24
+        tg["quiet_hours_end"] = int(tg_in.get("quiet_hours_end") or 0) % 24
+        tg["notify_price_drops"] = bool(tg_in.get("notify_price_drops"))
+        tg["send_run_summary"] = bool(tg_in.get("send_run_summary"))
+        # Blank means "leave the stored token alone" — the form cannot show it,
+        # so an empty field must not erase it.
+        if tg_in.get("bot_token"):
+            tg["bot_token"] = tg_in["bot_token"].strip()
+
+        f_in = tg_in.get("filters", {})
+        filters = tg.setdefault("filters", {})
+        for key in ("price_min", "price_max", "surface_min", "rooms_min"):
+            filters[key] = max(0, int(f_in.get(key) or 0))
+        zones = f_in.get("zones") or []
+        if isinstance(zones, str):
+            zones = [z.strip() for z in zones.split(",")]
+        filters["zones"] = [z for z in zones if z]
+        filters["exclude_agencies"] = bool(f_in.get("exclude_agencies"))
+        filters["skip_suspect"] = bool(f_in.get("skip_suspect"))
+
+        searches = []
+        for s in payload.get("searches", []):
+            path = (s.get("path") or "").strip()
+            if not path:
+                continue
+            params = {k: v for k, v in (s.get("params") or {}).items()
+                      if v not in ("", None)}
+            searches.append({"name": (s.get("name") or path).strip(),
+                             "path": path, "params": params})
+        if searches:
+            cfg["searches"] = searches
+
+        try:
+            save_config(cfg)
+        except Exception as e:
+            log.exception("saving settings failed")
+            return JSONResponse(status_code=500, content={"error": str(e)})
+        return {"ok": True, "searches": len(cfg["searches"])}
+
+    @app.post("/api/telegram-test")
+    async def telegram_test(request: Request):
+        payload = await request.json() if await request.body() else {}
+        probe = dict(cfg.get("telegram", {}))
+        if payload.get("bot_token"):
+            probe["bot_token"] = payload["bot_token"].strip()
+        if payload.get("chat_id"):
+            probe["chat_id"] = str(payload["chat_id"]).strip()
+        ok, message = notify.check_credentials(probe)
+        return {"ok": ok, "message": message}
+
+    # ── run a scrape now ─────────────────────────────────────────────────────
+
+    @app.post("/api/scrape-now")
+    def scrape_now():
+        """Kick off a scrape without waiting for the timer — mostly useful
+        right after changing the search conditions."""
+        lock = Path(db_path).parent / "scrape.lock"
+        if lock.exists() and time.time() - lock.stat().st_mtime < 3600:
+            return JSONResponse(status_code=409,
+                                content={"error": "uno scrape è già in corso"})
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(str(int(time.time())))
+
+        # Detached: the request returns immediately, the scrape takes minutes.
+        python = sys.executable
+        subprocess.Popen(
+            [python, "-m", "rentwatch", "scrape"],
+            cwd=str(PROJECT_ROOT),
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return {"ok": True, "message": "scrape avviato — ricarica fra qualche minuto"}
+
     @app.exception_handler(Exception)
     async def on_error(request, exc):
+        log.exception("unhandled error on %s", request.url.path)
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
     return app
+
+
+def _has_table(conn: sqlite3.Connection, name: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone() is not None

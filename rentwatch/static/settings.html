@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>rentwatch · impostazioni</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e;
+    --muted: #898781; --border: rgba(11,11,11,0.10); --accent: #2a78d6;
+    --good: #006300; --bad: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #fff; --ink-2: #c3c2b7;
+      --muted: #898781; --border: rgba(255,255,255,0.10); --accent: #3987e5;
+      --good: #0ca30c; --bad: #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 20px 16px 80px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  header h1 { font-size: 20px; margin: 0; }
+  header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  header a:hover { text-decoration: underline; }
+  header .spacer { margin-left: auto; }
+
+  fieldset { background: var(--surface); border: 1px solid var(--border);
+             border-radius: 10px; padding: 14px 16px; margin: 0 0 16px; }
+  legend { font-size: 13px; font-weight: 650; padding: 0 6px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 150px; }
+  .field label { color: var(--ink-2); font-size: 12px; }
+  input[type=text], input[type=number], input[type=password], textarea, select {
+    background: var(--page); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; width: 100%;
+  }
+  textarea { min-height: 92px; resize: vertical; font-family: ui-monospace, monospace; }
+  .check { display: flex; align-items: center; gap: 7px; font-size: 13px;
+           color: var(--ink-2); flex: 1 1 100%; }
+  .check input { width: auto; }
+
+  button { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 7px;
+           border: 1px solid var(--border); background: var(--surface);
+           color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .55; cursor: progress; }
+
+  .bar { position: sticky; bottom: 0; background: var(--page);
+         border-top: 1px solid var(--border); padding: 12px 0;
+         display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .msg { font-size: 13px; }
+  .msg.ok { color: var(--good); }
+  .msg.err { color: var(--bad); }
+
+  code { background: var(--page); border: 1px solid var(--border);
+         border-radius: 4px; padding: 1px 4px; font-size: 12px; }
+  .search { border: 1px dashed var(--border); border-radius: 8px;
+            padding: 10px 12px; margin-bottom: 10px; }
+  .search .del { color: var(--bad); background: none; border: 0; cursor: pointer;
+                 font-size: 12px; padding: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Impostazioni</h1>
+    <a href="__BASE__">← dashboard</a>
+    <span class="spacer"></span>
+    <a href="__BASE__logout">esci</a>
+  </header>
+
+  <fieldset>
+    <legend>Ricerca</legend>
+    <p class="hint">Le condizioni usate a ogni scrape. I parametri sono gli stessi
+      della URL di immobiliare.it: <code>prezzoMassimo</code>,
+      <code>superficieMinima</code>, <code>localiMinimo</code>,
+      <code>idMZona[]</code>. Torino è già impostata di default.</p>
+    <div id="searches"></div>
+    <button type="button" id="add-search">+ aggiungi ricerca</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Telegram</legend>
+    <p class="hint">Crea il bot con <code>@BotFather</code> per il token, e
+      scrivi a <code>@userinfobot</code> per il tuo chat id.</p>
+    <div class="row">
+      <div class="check">
+        <input type="checkbox" id="tg-enabled">
+        <label for="tg-enabled">Invia notifiche Telegram</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="tg-token">Bot token <span id="token-state" class="hint"></span></label>
+        <input type="password" id="tg-token" placeholder="lascia vuoto per non cambiarlo"
+               autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label for="tg-chat">Chat id</label>
+        <input type="text" id="tg-chat" inputmode="numeric">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="tg-quiet-start">Silenzio dalle</label>
+        <input type="number" id="tg-quiet-start" min="0" max="23">
+      </div>
+      <div class="field">
+        <label for="tg-quiet-end">alle</label>
+        <input type="number" id="tg-quiet-end" min="0" max="23">
+      </div>
+      <div class="field">
+        <label for="tg-max">Max messaggi per run</label>
+        <input type="number" id="tg-max" min="1" max="100">
+      </div>
+    </div>
+    <p class="hint">Nelle ore di silenzio gli annunci non vanno persi: restano in
+      coda e partono al primo scrape dopo la finestra.</p>
+    <div class="row">
+      <div class="check">
+        <input type="checkbox" id="tg-drops">
+        <label for="tg-drops">Avvisa anche sui ribassi di prezzo</label>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="tg-summary">
+        <label for="tg-summary">Riepilogo a fine scrape</label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="tg-template">Testo del messaggio</label>
+        <textarea id="tg-template"></textarea>
+        <span class="hint" id="placeholders"></span>
+      </div>
+    </div>
+    <button type="button" id="test">Invia messaggio di prova</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Quali annunci notificare</legend>
+    <p class="hint">Filtra solo le notifiche: la dashboard continua a mostrare tutto.</p>
+    <div class="row">
+      <div class="field">
+        <label for="f-price-min">Prezzo minimo €</label>
+        <input type="number" id="f-price-min" min="0">
+      </div>
+      <div class="field">
+        <label for="f-price-max">Prezzo massimo € (0 = nessuno)</label>
+        <input type="number" id="f-price-max" min="0">
+      </div>
+      <div class="field">
+        <label for="f-surface">Superficie minima m²</label>
+        <input type="number" id="f-surface" min="0">
+      </div>
+      <div class="field">
+        <label for="f-rooms">Locali minimi</label>
+        <input type="number" id="f-rooms" min="0">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="f-zones">Zone (separate da virgola, vuoto = tutte)</label>
+        <input type="text" id="f-zones" placeholder="San Salvario, Vanchiglia">
+      </div>
+    </div>
+    <div class="row">
+      <div class="check">
+        <input type="checkbox" id="f-agencies">
+        <label for="f-agencies">Solo privati (escludi le agenzie)</label>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="f-suspect">
+        <label for="f-suspect">Escludi i prezzi per stanza / posto letto</label>
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="bar">
+    <button class="primary" id="save">Salva</button>
+    <button id="scrape">Esegui scrape adesso</button>
+    <span class="msg" id="msg"></span>
+  </div>
+</div>
+
+<script>
+const BASE = "__BASE__";
+const $ = id => document.getElementById(id);
+let state = null;
+
+function msg(text, kind) {
+  const el = $("msg");
+  el.textContent = text;
+  el.className = "msg " + (kind || "");
+}
+
+function searchCard(search) {
+  const box = document.createElement("div");
+  box.className = "search";
+  const params = Object.entries(search.params || {})
+    .map(([k, v]) => `${k}=${v}`).join("\n");
+  box.innerHTML = `
+    <div class="row">
+      <div class="field"><label>Nome</label>
+        <input type="text" class="s-name"></div>
+      <div class="field"><label>Percorso</label>
+        <input type="text" class="s-path"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Parametri (uno per riga, chiave=valore)</label>
+        <textarea class="s-params" style="min-height:70px"></textarea></div>
+    </div>
+    <button type="button" class="del">rimuovi</button>`;
+  box.querySelector(".s-name").value = search.name || "";
+  box.querySelector(".s-path").value = search.path || "";
+  box.querySelector(".s-params").value = params;
+  box.querySelector(".del").onclick = () => box.remove();
+  return box;
+}
+
+function collectSearches() {
+  return [...document.querySelectorAll("#searches .search")].map(box => {
+    const params = {};
+    box.querySelector(".s-params").value.split("\n").forEach(line => {
+      const i = line.indexOf("=");
+      if (i > 0) {
+        const key = line.slice(0, i).trim();
+        const raw = line.slice(i + 1).trim();
+        if (key) params[key] = /^-?\d+$/.test(raw) ? Number(raw) : raw;
+      }
+    });
+    return {
+      name: box.querySelector(".s-name").value,
+      path: box.querySelector(".s-path").value,
+      params,
+    };
+  }).filter(s => s.path.trim());
+}
+
+function fill(data) {
+  state = data;
+  const list = $("searches");
+  list.innerHTML = "";
+  (data.searches || []).forEach(s => list.appendChild(searchCard(s)));
+
+  const t = data.telegram || {};
+  $("tg-enabled").checked = !!t.enabled;
+  $("tg-chat").value = t.chat_id || "";
+  $("tg-quiet-start").value = t.quiet_hours_start ?? 23;
+  $("tg-quiet-end").value = t.quiet_hours_end ?? 8;
+  $("tg-max").value = t.max_per_run ?? 20;
+  $("tg-drops").checked = t.notify_price_drops !== false;
+  $("tg-summary").checked = !!t.send_run_summary;
+  $("tg-template").value = t.template || "";
+  $("token-state").textContent = t.bot_token_set ? "— già impostato" : "— non impostato";
+  $("placeholders").textContent =
+    "Segnaposto: " + (data.placeholders || []).map(p => "{" + p + "}").join(" ");
+
+  const f = t.filters || {};
+  $("f-price-min").value = f.price_min || 0;
+  $("f-price-max").value = f.price_max || 0;
+  $("f-surface").value = f.surface_min || 0;
+  $("f-rooms").value = f.rooms_min || 0;
+  $("f-zones").value = (f.zones || []).join(", ");
+  $("f-agencies").checked = !!f.exclude_agencies;
+  $("f-suspect").checked = f.skip_suspect !== false;
+}
+
+function payload() {
+  return {
+    searches: collectSearches(),
+    telegram: {
+      enabled: $("tg-enabled").checked,
+      bot_token: $("tg-token").value,      // vuoto = non toccare quello salvato
+      chat_id: $("tg-chat").value,
+      quiet_hours_start: Number($("tg-quiet-start").value),
+      quiet_hours_end: Number($("tg-quiet-end").value),
+      max_per_run: Number($("tg-max").value),
+      notify_price_drops: $("tg-drops").checked,
+      send_run_summary: $("tg-summary").checked,
+      template: $("tg-template").value,
+      filters: {
+        price_min: Number($("f-price-min").value),
+        price_max: Number($("f-price-max").value),
+        surface_min: Number($("f-surface").value),
+        rooms_min: Number($("f-rooms").value),
+        zones: $("f-zones").value.split(",").map(z => z.trim()).filter(Boolean),
+        exclude_agencies: $("f-agencies").checked,
+        skip_suspect: $("f-suspect").checked,
+      },
+    },
+  };
+}
+
+async function post(path, body) {
+  const res = await fetch(BASE + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+$("add-search").onclick = () =>
+  $("searches").appendChild(searchCard({ name: "", path: "/affitto-case/torino/", params: {} }));
+
+$("save").onclick = async () => {
+  $("save").disabled = true;
+  msg("Salvataggio…");
+  try {
+    await post("api/settings", payload());
+    $("tg-token").value = "";
+    msg("Salvato. Vale dal prossimo scrape.", "ok");
+    fill(await (await fetch(BASE + "api/settings")).json());
+  } catch (e) {
+    msg("Errore: " + e.message, "err");
+  } finally {
+    $("save").disabled = false;
+  }
+};
+
+$("test").onclick = async () => {
+  $("test").disabled = true;
+  msg("Invio in corso…");
+  try {
+    const r = await post("api/telegram-test",
+      { bot_token: $("tg-token").value, chat_id: $("tg-chat").value });
+    msg(r.message, r.ok ? "ok" : "err");
+  } catch (e) {
+    msg("Errore: " + e.message, "err");
+  } finally {
+    $("test").disabled = false;
+  }
+};
+
+$("scrape").onclick = async () => {
+  $("scrape").disabled = true;
+  try {
+    const r = await post("api/scrape-now");
+    msg(r.message, "ok");
+  } catch (e) {
+    msg("Errore: " + e.message, "err");
+  } finally {
+    $("scrape").disabled = false;
+  }
+};
+
+fetch(BASE + "api/settings")
+  .then(r => r.json())
+  .then(fill)
+  .catch(e => msg("Impossibile caricare le impostazioni: " + e.message, "err"));
+</script>
+</body>
+</html>

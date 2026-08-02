@@ -1,11 +1,17 @@
 [Unit]
 Description=rentwatch - dashboard web server
 After=network-online.target
+Wants=network-online.target
 
 [Service]
 WorkingDirectory=%h/Immobiliare_homes
-ExecStart=%h/Immobiliare_homes/.venv/bin/python -m rentwatch serve --port 8777
+# --root-path tells the app it is mounted under /case/ so the links, the form
+# action and the session cookie carry the prefix. Drop it when serving at the
+# domain root. The port stays on loopback; nginx is the only way in.
+ExecStart=%h/Immobiliare_homes/.venv/bin/python -m rentwatch serve \
+          --host 127.0.0.1 --port 8777 --root-path /case
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=default.target

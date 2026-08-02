@@ -48,6 +48,9 @@
   header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
   header h1 { font-size: 20px; margin: 0; }
   header .sub { color: var(--muted); font-size: 13px; }
+  header .navlinks { margin-left: auto; display: flex; gap: 14px; }
+  header .navlinks a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  header .navlinks a:hover { text-decoration: underline; }
 
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
   .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
@@ -130,6 +133,10 @@
   <header>
     <h1>🏠 rentwatch — affitti a Torino</h1>
     <span class="sub" id="lastRun"></span>
+    <span class="navlinks">
+      <a href="__BASE__settings">impostazioni</a>
+      <a href="__BASE__logout">esci</a>
+    </span>
   </header>
 
   <div class="tiles" id="tiles"></div>
@@ -177,6 +184,8 @@
 <div id="tooltip"></div>
 
 <script>
+// Injected by the server: "/" locally, "/case/" when mounted under a prefix.
+const BASE = "__BASE__";
 const fmtEur = v => v == null ? "—" : "€ " + v.toLocaleString("it-IT");
 const state = { listings: [], filtered: [], sortKey: "first_seen", sortDir: -1, shown: 100 };
 
@@ -198,8 +207,8 @@ async function load() {
   const inactive = document.getElementById("fInactive").checked || liked;
   const hidden = document.getElementById("fHidden").checked || liked;
   const [over, listings] = await Promise.all([
-    fetch("/api/overview").then(r => r.json()),
-    fetch(`/api/listings?include_inactive=${inactive}&include_hidden=${hidden}`).then(r => r.json()),
+    fetch(BASE + "api/overview").then(r => r.json()),
+    fetch(`${BASE}api/listings?include_inactive=${inactive}&include_hidden=${hidden}`).then(r => r.json()),
   ]);
   state.listings = listings;
   renderTiles(over);
@@ -343,7 +352,7 @@ function renderRows() {
 }
 
 async function toggleHidden(id, hide) {
-  const res = await fetch(`/api/listings/${id}/hidden?value=${hide}`, { method: "POST" });
+  const res = await fetch(`${BASE}api/listings/${id}/hidden?value=${hide}`, { method: "POST" });
   if (!res.ok) return;
   const l = state.listings.find(x => x.id === id);
   if (l) l.hidden = hide ? 1 : 0;
@@ -354,7 +363,7 @@ async function toggleHidden(id, hide) {
 }
 
 async function toggleLiked(id, like) {
-  const res = await fetch(`/api/listings/${id}/liked?value=${like}`, { method: "POST" });
+  const res = await fetch(`${BASE}api/listings/${id}/liked?value=${like}`, { method: "POST" });
   if (!res.ok) return;
   const l = state.listings.find(x => x.id === id);
   if (l) l.liked = like ? 1 : 0;

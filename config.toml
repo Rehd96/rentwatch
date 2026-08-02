@@ -1,16 +1,58 @@
-# rentwatch configuration
+# rentwatch configuration — committed example.
+#
+# config.local.toml (gitignored) overrides this file entirely and is what the
+# dashboard settings page writes. Secrets — password hash, bot token — belong
+# there, never here.
+
 db_path = "data/rentwatch.db"
 
 # Seconds to wait between page requests (min, max) — keep polite.
 request_delay = [1.5, 3.0]
 
+[auth]
+# The dashboard shows addresses, prices and the flats you liked, so it asks for
+# a password. Set one with:  python -m rentwatch set-password
+# Turning this off is only reasonable on a laptop nothing else can reach.
+enabled = true
+username = "ion"
+password_hash = ""     # written by set-password, into config.local.toml
+secret_key = ""        # blank -> generated once into data/session_secret
+
+[schedule]
+# What the systemd timer is set to. Changing this line does not move the timer;
+# edit deploy/rentwatch-scrape.timer and `systemctl daemon-reload`.
+every_hours = 4
+
 [telegram]
-# Set enabled = true and fill in credentials to get a Telegram message
-# for every new listing. Create a bot with @BotFather to get the token;
-# get your chat id from @userinfobot.
+# Create a bot with @BotFather for the token; @userinfobot gives you the chat
+# id. Easiest from the dashboard: /settings, then "invia messaggio di prova".
 enabled = false
 bot_token = ""
 chat_id = ""
+max_per_run = 20
+
+# Nothing is sent between these hours (local time). Matches found inside the
+# window are queued, not dropped, and go out with the first run after it.
+quiet_hours_start = 23
+quiet_hours_end = 8
+
+notify_price_drops = true
+send_run_summary = false
+
+# Placeholders: {title} {price} {surface} {ppm2} {rooms} {floor}
+#               {zone} {address} {agency} {url} {old_price} {delta}
+template = "🏠 {title}\n💶 {price} · {surface}{ppm2}\n📍 {zone}\n{url}"
+
+[telegram.filters]
+# Which listings are worth a message. Separate from the search below: the
+# dashboard keeps showing everything, the phone only buzzes for these.
+price_min = 0
+price_max = 0            # 0 = no limit
+surface_min = 0
+rooms_min = 0
+zones = []               # macrozone names; empty = all
+exclude_agencies = false
+skip_suspect = true      # drop the per-room "student price" listings
 
 # One or more saved searches. Params are the same query parameters
 # immobiliare.it uses in its own URLs. Useful ones:

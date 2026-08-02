@@ -4,3 +4,5 @@ __pycache__/
 data/
 config.local.toml
 reports/
+config.local.toml.bak
+config.local.toml.tmp

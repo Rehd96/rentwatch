@@ -1,8 +1,13 @@
 [Unit]
 Description=rentwatch - scrape immobiliare.it listings
 After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 WorkingDirectory=%h/Immobiliare_homes
 ExecStart=%h/Immobiliare_homes/.venv/bin/python -m rentwatch scrape
+# A full sweep partitions by price band and sleeps 1.5–3s between pages, so it
+# takes minutes. This is far above that — it only stops a wedged run from
+# blocking the next slot forever.
+TimeoutStartSec=2h

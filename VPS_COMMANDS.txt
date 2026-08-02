@@ -1,0 +1,339 @@
+═══════════════════════════════════════════════════════════════════════════
+ rentwatch on labustagialla.it — deploy cheat-sheet
+ Dashboard at /case/, behind a login. Scrape every 4 hours. Telegram bot.
+ Copy-paste ONE STEP at a time and read the CHECK line before moving on.
+═══════════════════════════════════════════════════════════════════════════
+
+WHAT THIS ADDS TO THE DOMAIN
+
+  /case/                  rentwatch      127.0.0.1:8777   (this repo)
+  /case/login             the only page reachable without a session
+  /case/settings          search conditions + Telegram, editable in the browser
+
+  everything else on labustagialla.it is untouched: /, /blog/, /ezbk/, /cff/
+
+THREE UNITS
+
+  rentwatch-web.service     the dashboard, always on
+  rentwatch-scrape.timer    fires the scrape at 00/04/08/12/16/20 +jitter
+  rentwatch-bot.service     answers Telegram commands (optional)
+
+WHY THE LOGIN IS IN THE APP AND NOT IN NGINX
+  The old scaffold used auth_basic. The dashboard now authenticates itself, so
+  the gate still holds for anything that reaches 127.0.0.1:8777 directly — an
+  SSH tunnel, a future container port, a misplaced proxy_pass. The page lists
+  addresses, prices and the flats you liked; that is worth the extra care.
+
+BEFORE YOU START
+  This assumes the portfolio deploy is done and /etc/nginx/sites-available/
+  writerblog is the live server block for labustagialla.it. Everything below
+  runs as root on the VPS, so the checkout lands in /root.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 1 — PRE-FLIGHT
+───────────────────────────────────────────────────────────────────────────
+
+whoami; echo "HOME=$HOME"
+python3 --version
+ss -ltnp | grep -E ':8777|:8010|:8000' || echo "8777 is free"
+ls -d /root/Immobiliare_homes 2>/dev/null || echo "not cloned yet"
+nginx -T 2>/dev/null | grep -n "location /case" || echo "no /case block yet"
+
+CHECK: 8777 must NOT be listed as taken. If it is, something else is on that
+port — change --port in the unit file and in the nginx block to match.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 2 — GET THE CODE
+───────────────────────────────────────────────────────────────────────────
+
+cd /root
+git clone https://github.com/Rehd96/rentwatch.git Immobiliare_homes || \
+  (cd /root/Immobiliare_homes && git pull)
+cd /root/Immobiliare_homes
+python3 -m venv .venv
+./.venv/bin/pip install --upgrade pip
+./.venv/bin/pip install -r requirements.txt
+./.venv/bin/python -c "import curl_cffi, fastapi, uvicorn; print('deps ok')"
+
+CHECK: "deps ok". curl_cffi ships compiled wheels; if pip tries to build from
+source, `apt install python3-dev build-essential` first.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 3 — SET THE DASHBOARD PASSWORD
+───────────────────────────────────────────────────────────────────────────
+
+cd /root/Immobiliare_homes
+./.venv/bin/python -m rentwatch set-password --username ion
+
+It asks twice, hashes with PBKDF2 and writes config.local.toml. The plain
+password is never stored anywhere.
+
+CHECK the file it wrote, and that the hash is a hash:
+
+grep -A3 '^\[auth\]' config.local.toml
+
+You want `password_hash = "pbkdf2_sha256$260000$..."`. config.local.toml is
+gitignored — it holds this hash and, later, your bot token. Do not commit it.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 4 — FIRST SCRAPE (SHORT ONE)
+───────────────────────────────────────────────────────────────────────────
+
+Two pages only, to prove the VPS can reach immobiliare.it at all. Datacenter
+IPs get blocked more often than home connections — this is the moment to find
+out, before wiring up nginx and timers.
+
+cd /root/Immobiliare_homes
+./.venv/bin/python -m rentwatch scrape --max-pages 2
+
+CHECK: "done: N seen, N new, 0 price changes" with N > 0.
+
+IF IT FAILS with 403 / TLS errors, the VPS is being blocked. The code is fine
+and everything else below still works — you would scrape at home and copy the
+DB up instead:
+    # on the laptop, after a local scrape:
+    rsync -avz data/rentwatch.db root@labustagialla.it:/root/Immobiliare_homes/data/
+In that case skip the timer in STEP 6 and run the web service only.
+
+--max-pages never deactivates listings, so a partial run cannot mark the whole
+market as gone. The full sweep in STEP 6 does.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 5 — SYSTEMD UNITS
+───────────────────────────────────────────────────────────────────────────
+
+The units in deploy/ use %h, which is /root here. Copy them as system units:
+
+cd /root/Immobiliare_homes
+cp deploy/rentwatch-web.service    /etc/systemd/system/
+cp deploy/rentwatch-scrape.service /etc/systemd/system/
+cp deploy/rentwatch-scrape.timer   /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now rentwatch-web.service
+sleep 2
+systemctl status rentwatch-web --no-pager | head -12
+curl -si http://127.0.0.1:8777/login | head -3
+
+CHECK: "active (running)", and the curl prints "HTTP/1.1 200 OK". If it prints
+303 instead you hit the redirect loop — you are on an old checkout, `git pull`.
+
+curl -so /dev/null -w 'root without a session: %{http_code}\n' http://127.0.0.1:8777/
+curl -so /dev/null -w 'api  without a session: %{http_code}\n' http://127.0.0.1:8777/api/listings
+
+CHECK: 307/303 for the page (redirect to the login) and 401 for the API. If
+either says 200, the gate is off — check `[auth] enabled` in config.local.toml
+and restart before going any further.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 6 — THE 4-HOUR TIMER
+───────────────────────────────────────────────────────────────────────────
+
+systemctl enable --now rentwatch-scrape.timer
+systemctl list-timers rentwatch-scrape --no-pager
+
+CHECK: a NEXT time at the next 00/04/08/12/16/20 slot, LEFT counting down.
+
+Now one full sweep by hand, so the DB has the real market in it and the
+deactivation pass has something to compare against. It takes several minutes —
+1.5–3s between pages, on purpose:
+
+systemctl start rentwatch-scrape.service
+journalctl -u rentwatch-scrape -f -n 30      # Ctrl-C to stop following
+
+CHECK: ends with "done: N seen, ..." then "markdown report: ...". The first run
+deliberately sends no Telegram messages — the entire market would arrive at
+once. Notifications start from the second run.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 7 — NGINX: MOUNT IT AT /case/
+───────────────────────────────────────────────────────────────────────────
+
+Back up first, always:
+
+sudo cp /etc/nginx/sites-available/writerblog "/root/writerblog-nginx.bak-$(date +%F-%H%M)"
+
+Insert the two blocks just before the portfolio's `location /` (order does not
+actually matter — nginx picks the longest prefix, not the first — but keeping
+`location /` last stays readable):
+
+sudo python3 - <<'PY'
+import re
+p = '/etc/nginx/sites-available/writerblog'
+s = open(p).read()
+# Match a real location block, not the word "/case" inside a comment.
+if re.search(r'^\s*location\s*=?\s*/case', s, re.M):
+    print('already there — nothing to do'); raise SystemExit
+block = '''
+    location /case/ {
+        proxy_pass http://127.0.0.1:8777/;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    location = /case {
+        return 301 /case/;
+    }
+
+'''
+m = re.search(r'\n(\s*)location / \{', s)
+if not m:
+    print('COULD NOT FIND `location / {` — edit by hand, do not reload')
+else:
+    s = s[:m.start()] + '\n' + block + s[m.start():].lstrip('\n')
+    open(p, 'w').write(s)
+    print('/case/ block inserted')
+PY
+
+sudo nginx -t && sudo systemctl reload nginx
+
+CHECK: "syntax is ok", "test is successful", no error from the reload.
+
+THE TRAILING SLASH ON proxy_pass MATTERS. `http://127.0.0.1:8777/` strips
+"/case" before the app sees it; the unit passes --root-path /case so links,
+the login form action and the session cookie all carry the prefix back. Drop
+that slash and every URL in the page breaks.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 8 — VERIFY FROM OUTSIDE
+───────────────────────────────────────────────────────────────────────────
+
+for p in /case/ /case/login /case/api/listings /case/settings \
+         / /blog/ /ezbk/ /robots.txt; do
+  printf '%-26s %s\n' "$p" "$(curl -so /dev/null -w '%{http_code}' https://labustagialla.it$p)"
+done
+
+WANT:
+  /case/              303   (redirect to the login — this is correct)
+  /case/login         200
+  /case/api/listings  401   (locked, as it should be)
+  /case/settings      303
+  /                   200   portfolio, untouched
+  /blog/              200   blog, untouched
+  /ezbk/              200 or 30x
+  /robots.txt         200
+
+curl -s https://labustagialla.it/robots.txt | grep case
+
+CHECK: "Disallow: /case/" — that comes from the portfolio app, which owns
+robots.txt for the whole domain. If it is missing, `git pull` in /root/HiImIon
+and restart it; crawlers should not be indexing your flat hunt.
+
+Now open https://labustagialla.it/case/ in a browser and log in.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 9 — TELEGRAM
+───────────────────────────────────────────────────────────────────────────
+
+1. In Telegram, talk to @BotFather → /newbot → copy the token.
+2. Talk to @userinfobot → it replies with your numeric chat id.
+3. Open https://labustagialla.it/case/settings, paste both, tick "Invia
+   notifiche Telegram", press "Invia messaggio di prova".
+
+CHECK: the test message arrives on your phone. If it does not, the page tells
+you which half failed — bad token, or good token but wrong chat id. (A bot
+cannot message you until you have sent it something first: open the chat and
+press Start.)
+
+Same thing from the shell, if you would rather:
+
+cd /root/Immobiliare_homes && ./.venv/bin/python -m rentwatch telegram-test
+
+WHAT YOU CAN TUNE ON THAT PAGE
+  - the search itself: price cap, minimum m², rooms, extra immobiliare.it
+    params. This is what the 4-hour scrape actually uses.
+  - which listings are worth a message — the filters are separate from the
+    search, so the dashboard can keep showing everything while the phone only
+    buzzes for what you would actually go and see.
+  - quiet hours (23→8 by default). Nothing is lost: matches found overnight
+    are queued and sent by the first run after the window.
+  - the message text, with {title} {price} {surface} {ppm2} {zone} {url} …
+  - price-drop alerts on already-known listings.
+
+The token is write-only in that form: it is stored hashed away in
+config.local.toml and never sent back to the browser, so leaving the field
+blank on a later save keeps the token you already set.
+
+
+───────────────────────────────────────────────────────────────────────────
+ STEP 10 — THE COMMAND BOT (OPTIONAL)
+───────────────────────────────────────────────────────────────────────────
+
+Only worth it if you want to ask rentwatch things from the phone instead of
+just receiving. It long-polls Telegram, so nothing new is exposed.
+
+cd /root/Immobiliare_homes
+cp deploy/rentwatch-bot.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now rentwatch-bot.service
+journalctl -u rentwatch-bot -n 20 --no-pager
+
+CHECK: "bot @yourbot listening (only chat NNN is answered)". Then send it
+/stato from Telegram.
+
+Commands: /stato /ultimi /preferiti /filtri /prezzo /superficie /silenzia
+          /riattiva /aiuto
+
+It answers your chat_id and nobody else's — a bot token in the wrong hands
+would otherwise read out your shortlist.
+
+
+───────────────────────────────────────────────────────────────────────────
+ UPDATING LATER
+───────────────────────────────────────────────────────────────────────────
+
+cd /root/Immobiliare_homes
+git pull
+./.venv/bin/pip install -r requirements.txt
+systemctl restart rentwatch-web rentwatch-bot
+curl -so /dev/null -w '%{http_code}\n' https://labustagialla.it/case/login
+
+config.local.toml and data/ are gitignored, so a pull never touches your
+password, your token or the database.
+
+
+───────────────────────────────────────────────────────────────────────────
+ IF SOMETHING BREAKS
+───────────────────────────────────────────────────────────────────────────
+
+journalctl -u rentwatch-web -n 50 --no-pager
+journalctl -u rentwatch-scrape -n 50 --no-pager
+systemctl list-timers rentwatch-scrape --no-pager
+
+/case/ redirects to /case/login and stays there
+    The cookie is scoped to /case/ and marked Secure over HTTPS. If the browser
+    is on plain http:// it will not store it and you loop. Use https://.
+
+/case/login gives 502
+    The web service is down: systemctl status rentwatch-web
+
+Every /case/ URL 404s but the login page works
+    proxy_pass lost its trailing slash, or --root-path does not match the nginx
+    prefix. Both must say /case.
+
+Forgot the password
+    ./.venv/bin/python -m rentwatch set-password --username ion
+    systemctl restart rentwatch-web
+
+Locked out after too many tries
+    Five failures per IP, then five minutes. `systemctl restart rentwatch-web`
+    clears it — the counter is in memory only.
+
+Scrape says 403 / no listings
+    immobiliare.it is blocking the datacenter IP. See the fallback in STEP 4.
+
+ROLLBACK — take /case/ off the internet, leave everything else alone:
+    systemctl disable --now rentwatch-web rentwatch-scrape.timer rentwatch-bot
+    sudo cp /root/writerblog-nginx.bak-<TAB> /etc/nginx/sites-available/writerblog
+    sudo nginx -t && sudo systemctl reload nginx

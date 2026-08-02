@@ -10,10 +10,15 @@ senza controllare gli annunci a mano.
 .venv/bin/python -m rentwatch scrape             # aggiorna DB + reports/overview.md
 .venv/bin/python -m rentwatch scrape --max-pages 2   # test veloce (niente deactivation)
 .venv/bin/python -m rentwatch serve              # dashboard http://127.0.0.1:8777
+.venv/bin/python -m rentwatch serve --root-path /case   # dietro nginx su /case/
 .venv/bin/python -m rentwatch report             # rigenera solo il report MD
+.venv/bin/python -m rentwatch set-password       # password della dashboard
+.venv/bin/python -m rentwatch telegram-test      # verifica token + chat id
+.venv/bin/python -m rentwatch bot                # loop comandi Telegram
 ```
 
-Non c'è una test suite: verificare con `scrape --max-pages 2` + `curl /api/overview`.
+Non c'è una test suite: verificare con `scrape --max-pages 2` + login su
+`/login` + `curl /api/overview` (401 senza cookie, 200 con).
 
 ## Architettura
 
@@ -28,8 +33,28 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + `curl /api/over
   prezzo/locali < 120 con 4+ locali): flag soft, mai esclusione dal DB;
   esclusi però dalle mediane €/m² e dalle tabelle del report.
 - `rentwatch/web.py` + `static/index.html` — dashboard single-page, dati da /api/*.
+- `rentwatch/auth.py` — PBKDF2 + cookie di sessione firmato HMAC, solo stdlib.
+  Il gate è un **middleware**, non una dependency per rotta: una rotta aggiunta
+  domani nasce protetta. Pubbliche solo `/login` e `/healthz`.
+- `rentwatch/notify.py` — Telegram: filtri, template, ore di silenzio, ribassi.
+  In ore di silenzio le notifiche finiscono in `notify_queue` e partono al primo
+  run utile — non si perdono.
+- `rentwatch/bot.py` — long-poll `getUpdates`, risponde **solo** al `chat_id`
+  configurato. Niente webhook, niente porte esposte.
+- `rentwatch/settings_store.py` — scrive `config.local.toml` dalla dashboard
+  (mini-emitter TOML: `tomllib` legge ma non scrive, e tomli-w non vale una
+  dipendenza in più). Scrittura atomica + `.bak`.
 - `rentwatch/report.py` — snapshot Markdown in `reports/overview.md` (per mobile).
 - `config.toml` — ricerche e Telegram; `config.local.toml` (gitignored) ha precedenza.
+
+## Montaggio sotto prefisso (`/case/`)
+
+nginx toglie `/case` (`proxy_pass http://127.0.0.1:8777/;` con slash finale),
+`--root-path /case` lo rimette su link, form di login e cookie. Le pagine sono
+servite sostituendo `__BASE__`, quindi gli stessi file HTML funzionano sia alla
+radice sia sotto prefisso. **Attenzione:** `request.url.path` include il
+root_path — usare `app_path()` per i confronti, altrimenti `/login` smette di
+essere pubblica e la pagina di login redirige a se stessa.
 
 ## Vincoli dell'API immobiliare.it (scoperti sul campo — non "migliorarli")
 
@@ -44,5 +69,10 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + `curl /api/over
 ## Convenzioni
 
 - UI e documentazione utente in italiano; codice e log in inglese.
-- Nessuna dipendenza oltre requirements.txt senza motivo forte.
+- Nessuna dipendenza oltre requirements.txt senza motivo forte. Per questo auth
+  e TOML-writer sono stdlib, e il form di login è parsato a mano invece di
+  usare `fastapi.Form` (che tirerebbe dentro `python-multipart`).
 - La deactivation degli annunci scatta solo su scrape completo (mai con --max-pages).
+- Segreti (`password_hash`, `bot_token`) solo in `config.local.toml`, mai in
+  `config.toml` e mai rimandati al browser: le API li restituiscono come
+  `bot_token_set: true/false`.

@@ -50,6 +50,17 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
     price_changes INTEGER DEFAULT 0,
     status TEXT DEFAULT 'running'
 );
+
+-- Telegram messages that came due during quiet hours. Drained by the first
+-- run after the window, so a listing found at 3am is still announced at 8am
+-- instead of being silently lost.
+CREATE TABLE IF NOT EXISTS notify_queue (
+    listing_id INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'new',
+    queued_at TEXT NOT NULL,
+    payload TEXT,
+    PRIMARY KEY (listing_id, kind)
+);
 """
 
 LISTING_COLUMNS = [
@@ -98,8 +109,15 @@ def is_suspect(price, surface_m2, rooms) -> bool:
     return n >= 4 and price / n < 120
 
 
-def upsert_listing(conn: sqlite3.Connection, listing: dict, seen_at: str) -> str:
-    """Insert or refresh a listing. Returns 'new', 'price_changed' or 'seen'."""
+def upsert_listing(conn: sqlite3.Connection, listing: dict,
+                   seen_at: str) -> tuple[str, int | None]:
+    """Insert or refresh a listing.
+
+    Returns (outcome, previous_price) where outcome is 'new', 'price_changed'
+    or 'seen'. The old price comes back because the Telegram notifier reports
+    drops as "€900 → €850" and re-querying it per listing would double the
+    work of a 2000-row run.
+    """
     row = conn.execute(
         "SELECT price FROM listings WHERE id = ?", (listing["id"],)
     ).fetchone()
@@ -115,7 +133,7 @@ def upsert_listing(conn: sqlite3.Connection, listing: dict, seen_at: str) -> str
             "INSERT OR IGNORE INTO price_history (listing_id, observed_at, price) VALUES (?, ?, ?)",
             (listing["id"], seen_at, listing.get("price")),
         )
-        return "new"
+        return "new", None
 
     assignments = ", ".join(f"{c} = ?" for c in LISTING_COLUMNS)
     conn.execute(
@@ -127,8 +145,8 @@ def upsert_listing(conn: sqlite3.Connection, listing: dict, seen_at: str) -> str
             "INSERT OR IGNORE INTO price_history (listing_id, observed_at, price) VALUES (?, ?, ?)",
             (listing["id"], seen_at, listing.get("price")),
         )
-        return "price_changed"
-    return "seen"
+        return "price_changed", row["price"]
+    return "seen", row["price"]
 
 
 def deactivate_unseen(conn: sqlite3.Connection, run_started: str) -> int:
@@ -138,6 +156,44 @@ def deactivate_unseen(conn: sqlite3.Connection, run_started: str) -> int:
         (run_started,),
     )
     return cur.rowcount
+
+
+def get_listing(conn: sqlite3.Connection, listing_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def queue_notification(conn: sqlite3.Connection, listing_id: int,
+                       kind: str = "new", payload: str | None = None) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO notify_queue (listing_id, kind, queued_at, payload)"
+        " VALUES (?, ?, ?, ?)",
+        (listing_id, kind, now_iso(), payload),
+    )
+
+
+def drain_notifications(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    """Take queued notifications off the queue and return them with their
+    listing rows attached. Rows whose listing vanished are dropped."""
+    queued = conn.execute(
+        "SELECT listing_id, kind, payload FROM notify_queue ORDER BY queued_at LIMIT ?",
+        (limit,),
+    ).fetchall()
+    out = []
+    for row in queued:
+        listing = get_listing(conn, row["listing_id"])
+        conn.execute(
+            "DELETE FROM notify_queue WHERE listing_id = ? AND kind = ?",
+            (row["listing_id"], row["kind"]),
+        )
+        if listing:
+            out.append({"listing": listing, "kind": row["kind"], "payload": row["payload"]})
+    conn.commit()
+    return out
+
+
+def queue_size(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) c FROM notify_queue").fetchone()["c"]
 
 
 def start_run(conn: sqlite3.Connection) -> int:

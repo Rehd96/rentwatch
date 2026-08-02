@@ -1,0 +1,15 @@
+[Unit]
+Description=rentwatch - Telegram command bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%h/Immobiliare_homes
+ExecStart=%h/Immobiliare_homes/.venv/bin/python -m rentwatch bot
+Restart=always
+# Long-polls Telegram, so a network blip just means the next getUpdates fails
+# and the loop backs off. Restart slowly; there is nothing urgent here.
+RestartSec=30
+
+[Install]
+WantedBy=default.target

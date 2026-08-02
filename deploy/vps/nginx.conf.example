@@ -1,21 +1,26 @@
-# TODO: scaffold non ancora testato — vedi TODO.md
-# /etc/nginx/sites-available/rentwatch — poi: ln -s + nginx -t + systemctl reload nginx
-# HTTPS: eseguire `certbot --nginx -d case.tuodominio.it` dopo aver puntato il DNS.
+# rentwatch behind nginx on labustagialla.it, at /case/.
 #
-# Basic auth (OBBLIGATORIA prima di esporre — dati e link personali):
-#   sudo apt install apache2-utils
-#   sudo htpasswd -c /etc/nginx/rentwatch.htpasswd rentwatch
+# These two blocks go INSIDE the existing `server { ... }` for labustagialla.it
+# (/etc/nginx/sites-available/writerblog), next to the portfolio and blog
+# blocks — not in a server block of their own. That server already holds the
+# certificate for this host; a second one for the same name would just fight
+# with it.
+#
+# No auth_basic any more: the dashboard has its own login, which also covers
+# anyone who reaches 127.0.0.1:8777 without passing through nginx at all.
 
-server {
-    listen 80;
-    server_name case.tuodominio.it;   # TODO: dominio reale
+location /case/ {
+    # The trailing slash on proxy_pass strips "/case" before the app sees it;
+    # --root-path /case in the unit file puts it back on links and cookies.
+    proxy_pass http://127.0.0.1:8777/;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 60s;
+}
 
-    auth_basic "rentwatch";
-    auth_basic_user_file /etc/nginx/rentwatch.htpasswd;
-
-    location / {
-        proxy_pass http://127.0.0.1:8777;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
+# Without this, /case without the slash 404s instead of reaching the dashboard.
+location = /case {
+    return 301 /case/;
 }

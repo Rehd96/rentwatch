@@ -31,7 +31,12 @@ affittati. rentwatch fa quel lavoro e presenta solo la differenza.
   e li esclude dalle mediane, senza cancellarli: a volte sono davvero
   l'occasione giusta.
 - **Report Markdown** rigenerato a ogni scansione, leggibile dal telefono.
-- **Notifiche Telegram** opzionali per ogni nuovo annuncio.
+- **Notifiche Telegram** configurabili: filtri propri (prezzo, m², locali, zone,
+  solo privati), testo del messaggio personalizzabile, ore di silenzio e avvisi
+  sui ribassi. Un bot risponde anche ai comandi, da `/stato` a `/preferiti`.
+- **Login** sulla dashboard: sessione firmata, password PBKDF2, throttle sui
+  tentativi. Serve per poterla esporre su internet senza pubblicare la propria
+  ricerca di casa.
 
 ## Requisiti
 
@@ -47,11 +52,17 @@ python3 -m venv .venv
 ## Uso
 
 ```bash
+.venv/bin/python -m rentwatch set-password          # password della dashboard
 .venv/bin/python -m rentwatch scrape                # scansione completa
 .venv/bin/python -m rentwatch scrape --max-pages 2  # prova veloce
 .venv/bin/python -m rentwatch serve                 # dashboard su :8777
 .venv/bin/python -m rentwatch report                # solo il report Markdown
+.venv/bin/python -m rentwatch telegram-test         # verifica token e chat id
+.venv/bin/python -m rentwatch bot                   # risponde ai comandi Telegram
 ```
+
+La dashboard chiede il login: imposta prima una password con `set-password`.
+Su un portatile isolato si può togliere con `[auth] enabled = false`.
 
 La prima scansione popola il database senza inviare notifiche (sarebbe uno
 sciame di messaggi per l'intero mercato); dalla seconda in poi segnala solo le
@@ -84,18 +95,35 @@ Le modifiche personali vanno in `config.local.toml` (ha la precedenza ed è in
 `.gitignore`) — è anche il posto giusto per il token Telegram, che così non
 finisce mai in un commit.
 
+Ricerche, filtri di notifica e impostazioni Telegram si modificano anche dalla
+pagina **Impostazioni** della dashboard, che scrive lei `config.local.toml`.
+
 ### Telegram (opzionale)
 
 1. Crea un bot con [@BotFather](https://t.me/BotFather) e prendi il token.
 2. Scrivi al bot, poi recupera il tuo chat id da [@userinfobot](https://t.me/userinfobot).
-3. In `config.local.toml`:
+3. Incollali nella pagina Impostazioni e premi "invia messaggio di prova",
+   oppure a mano in `config.local.toml`:
 
 ```toml
 [telegram]
 enabled = true
 bot_token = "…"
 chat_id = "…"
+quiet_hours_start = 23     # niente messaggi di notte: restano in coda
+quiet_hours_end = 8
+template = "🏠 {title}\n💶 {price} · {surface}{ppm2}\n📍 {zone}\n{url}"
+
+[telegram.filters]
+price_max = 900            # notifica solo sotto questa soglia
+surface_min = 45
+zones = ["Vanchiglia", "San Salvario"]
 ```
+
+I filtri valgono **solo per le notifiche**: la dashboard continua a mostrare
+tutto il mercato. Con `python -m rentwatch bot` attivo puoi anche chiedere le
+cose dal telefono: `/stato`, `/ultimi`, `/preferiti`, `/filtri`, `/prezzo 850`,
+`/silenzia`. Il bot risponde soltanto al `chat_id` configurato.
 
 ## Come funziona
 
@@ -105,7 +133,10 @@ chat_id = "…"
 | `rentwatch/db.py` | schema SQLite, upsert, storico prezzi, migrazioni |
 | `rentwatch/web.py` + `static/index.html` | dashboard FastAPI + single-page |
 | `rentwatch/report.py` | snapshot Markdown |
-| `rentwatch/notify.py` | notifiche Telegram |
+| `rentwatch/notify.py` | notifiche Telegram: filtri, template, ore di silenzio |
+| `rentwatch/bot.py` | comandi Telegram (long-poll, niente webhook) |
+| `rentwatch/auth.py` | password PBKDF2 e cookie di sessione firmato |
+| `rentwatch/settings_store.py` | scrive `config.local.toml` dalla dashboard |
 
 Nessun parsing HTML: il sito alimenta le proprie pagine di ricerca con un
 endpoint JSON (`/api-next/search-list/listings/`, gli stessi dati che stanno in
@@ -131,8 +162,8 @@ Dettagli che costano tempo scoprire da soli:
 
 ## Automazione
 
-Unit systemd utente pronte in `deploy/` (scansione oraria + dashboard sempre
-attiva):
+Unit systemd pronte in `deploy/`: scansione **ogni 4 ore** (00/04/08/12/16/20,
+con jitter), dashboard sempre attiva, bot opzionale.
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -140,13 +171,24 @@ cp deploy/rentwatch-*.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now rentwatch-scrape.timer
 systemctl --user enable --now rentwatch-web.service
+systemctl --user enable --now rentwatch-bot.service   # opzionale
 ```
 
-In `deploy/vps/` ci sono scaffold **non testati** per l'hosting su VPS
-(Dockerfile, compose con sidecar di scraping, esempio nginx con basic auth).
-Se esponi la dashboard su internet mettila dietro autenticazione: contiene le
-tue ricerche e i tuoi preferiti. Da valutare anche il blocco degli IP
-datacenter, più sospetti di una connessione residenziale.
+Per cambiare la cadenza si modifica `OnCalendar` in
+`deploy/rentwatch-scrape.timer` (la chiave `[schedule] every_hours` nel config
+è solo documentazione, non muove il timer).
+
+### Su un VPS, dietro nginx
+
+`VPS_COMMANDS.txt` contiene la procedura completa passo per passo: la dashboard
+finisce sotto un prefisso (`/case/`) accanto agli altri siti dello stesso
+dominio, con `proxy_pass http://127.0.0.1:8777/;` e `--root-path /case`. La
+porta resta su loopback, e l'autenticazione è quella dell'app: vale anche per
+chi arrivasse alla 8777 senza passare da nginx.
+
+`deploy/vps/` contiene in più uno scaffold Docker **mai testato**, alternativo
+a systemd. Da valutare anche il blocco degli IP datacenter da parte del
+portale, più sospetti di una connessione residenziale.
 
 ## Limiti noti
 
@@ -157,7 +199,9 @@ datacenter, più sospetti di una connessione residenziale.
 - L'API è interna e non documentata: può cambiare senza preavviso. Se succede,
   la struttura dei dati si ritrova in `__NEXT_DATA__` di una pagina di ricerca.
 - Nessuna test suite: la verifica è `scrape --max-pages 2` più un colpo d'occhio
-  su `/api/overview`.
+  su `/api/overview` (401 senza cookie di sessione, 200 dopo il login).
+- Un solo utente. Il login è pensato per proteggere una dashboard personale, non
+  per gestire account multipli.
 - Il database (`data/`) e i report generati non sono versionati: contengono i
   tuoi dati di ricerca.
 
