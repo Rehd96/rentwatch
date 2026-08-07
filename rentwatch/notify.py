@@ -77,7 +77,7 @@ def chat_ids(cfg: dict) -> list[str]:
 
 
 def send_message(cfg: dict, text: str, chat_id: str | None = None,
-                 preview: bool = True) -> bool:
+                 preview: bool = True, reply_markup: dict | None = None) -> bool:
     """Send to one chat, or to every recipient when chat_id is not given.
 
     True if it reached at least one person: one blocked or deleted chat should
@@ -94,16 +94,26 @@ def send_message(cfg: dict, text: str, chat_id: str | None = None,
 
     delivered = 0
     for target in targets:
-        ok, error = request(cfg["bot_token"], "sendMessage", {
+        payload = {
             "chat_id": target,
             "text": text,
             "disable_web_page_preview": not preview,
-        })
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        ok, error = request(cfg["bot_token"], "sendMessage", payload)
         if ok:
             delivered += 1
         else:
             log.warning("telegram: delivery to %s failed: %s", target, error)
     return delivered > 0
+
+
+def like_keyboard(listing_id: int, liked: bool = False) -> dict:
+    """Inline button so a heart can be tapped from the notification itself —
+    no copying the address into the dashboard's search box."""
+    label = "💔 Rimuovi dai preferiti" if liked else "🤍 Preferiti"
+    return {"inline_keyboard": [[{"text": label, "callback_data": f"fav:{listing_id}"}]]}
 
 
 def known_chats(token: str) -> list[dict]:
@@ -301,8 +311,8 @@ def notify(conn, cfg: dict, new_listings: list[dict],
     cap = int(cfg.get("max_per_run") or 20)
     sent = 0
     for item in pending[:cap]:
-        if send_message(cfg, format_listing(item["listing"], template,
-                                            item["kind"], item["old_price"])):
+        text = format_listing(item["listing"], template, item["kind"], item["old_price"])
+        if send_message(cfg, text, reply_markup=like_keyboard(item["listing"]["id"])):
             sent += 1
 
     if len(pending) > cap:
