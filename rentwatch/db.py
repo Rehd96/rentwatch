@@ -169,6 +169,20 @@ def deactivate_unseen(conn: sqlite3.Connection, run_started: str) -> int:
     return cur.rowcount
 
 
+def hearted_expiring(conn: sqlite3.Connection, run_started: str) -> list[dict]:
+    """Favourited listings about to be marked inactive by deactivate_unseen().
+
+    Read before that call — is_active flips to 0 there and this query would
+    otherwise see nothing to report.
+    """
+    rows = conn.execute(
+        "SELECT l.* FROM listings l WHERE l.is_active = 1 AND l.last_seen < ?"
+        " AND EXISTS (SELECT 1 FROM favourites f WHERE f.listing_id = l.id)",
+        (run_started,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def adopt_legacy_likes(conn: sqlite3.Connection, username: str) -> int:
     """Give the pre-multi-user hearts to whoever was the only user.
 

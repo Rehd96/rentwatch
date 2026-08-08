@@ -259,6 +259,8 @@ def format_listing(listing: dict, template: str | None = None,
     text = (template or DEFAULT_TEMPLATE).format_map(fields)
     if kind == "price_drop" and old_price and price:
         text = f"📉 Ribasso: € {old_price} → € {price}\n\n{text}"
+    elif kind == "delisted":
+        text = f"💔 Non più disponibile:\n\n{text}"
     # A template can leave blank lines where a field was empty.
     return "\n".join(line for line in text.splitlines() if line.strip())
 
@@ -267,6 +269,7 @@ def format_listing(listing: dict, template: str | None = None,
 
 def notify(conn, cfg: dict, new_listings: list[dict],
            price_drops: list[tuple[dict, int]] | None = None,
+           delisted: list[dict] | None = None,
            run_summary: str | None = None) -> int:
     """Send (or queue) messages for this run. Returns messages actually sent.
 
@@ -294,6 +297,10 @@ def notify(conn, cfg: dict, new_listings: list[dict],
                     and passes_filters(listing, filters):
                 candidates.append({"listing": listing, "kind": "price_drop",
                                    "old_price": old_price})
+    # Someone hearted this — worth knowing regardless of the search filters,
+    # which are about what is interesting to discover, not what to keep.
+    candidates += [{"listing": listing, "kind": "delisted", "old_price": None}
+                  for listing in (delisted or [])]
 
     if quiet:
         for item in candidates:
@@ -313,10 +320,20 @@ def notify(conn, cfg: dict, new_listings: list[dict],
     ] + candidates
 
     cap = int(cfg.get("max_per_run") or 20)
+    hearts_by_listing = db.favourites_by_listing(conn) if any(
+        item["kind"] == "delisted" for item in pending) else {}
     sent = 0
     for item in pending[:cap]:
+        listing_id = item["listing"]["id"]
+        hearts = hearts_by_listing.get(listing_id, [])
+        if item["kind"] == "delisted" and not hearts:
+            # Unhearted between queueing and draining — no longer relevant.
+            continue
         text = format_listing(item["listing"], template, item["kind"], item["old_price"])
-        if send_message(cfg, text, reply_markup=listing_keyboard(item["listing"]["id"])):
+        if hearts:
+            text = f"♥ {' + '.join(hearts)}\n{text}"
+        keyboard = listing_keyboard(listing_id, liked=bool(hearts))
+        if send_message(cfg, text, reply_markup=keyboard):
             sent += 1
 
     if len(pending) > cap:

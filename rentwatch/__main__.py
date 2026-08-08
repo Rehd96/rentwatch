@@ -23,6 +23,7 @@ def cmd_scrape(cfg: dict, args: argparse.Namespace) -> int:
     seen = new = changed = 0
     new_listings: list[dict] = []
     price_drops: list[tuple[dict, int]] = []
+    delisted: list[dict] = []
     status = "ok"
     try:
         for search in cfg["searches"]:
@@ -41,8 +42,10 @@ def cmd_scrape(cfg: dict, args: argparse.Namespace) -> int:
                     conn.commit()
         # Only prune when we swept every page, otherwise unseen ≠ gone
         if args.max_pages is None:
+            delisted = dbmod.hearted_expiring(conn, run_started)
             deactivated = dbmod.deactivate_unseen(conn, run_started)
-            log.info("deactivated %d listings no longer online", deactivated)
+            log.info("deactivated %d listings no longer online (%d hearted)",
+                     deactivated, len(delisted))
     except ScrapeError as e:
         status = f"error: {e}"
         log.error("scrape aborted: %s", e)
@@ -65,7 +68,7 @@ def cmd_scrape(cfg: dict, args: argparse.Namespace) -> int:
         summary = (f"🔄 Scrape completato: {seen} annunci visti, {new} nuovi, "
                    f"{changed} variazioni di prezzo.")
         sent = notify.notify(conn, cfg.get("telegram", {}), new_listings,
-                             price_drops, run_summary=summary)
+                             price_drops, delisted=delisted, run_summary=summary)
         if sent:
             log.info("sent %d telegram notifications", sent)
     conn.close()

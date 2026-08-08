@@ -55,6 +55,13 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + login su
   un bottone inline `listing_keyboard()` (callback_data `fav:<id>`/`hide:<id>`):
   mettere ♥ o scartare ✕ senza uscire da Telegram, niente copia-incolla
   dell'indirizzo sul sito.
+  `db.hearted_expiring()` gira **prima** di `deactivate_unseen()` (che azzera
+  `is_active` e quindi renderebbe la query cieca) e passa a `notify()` gli
+  annunci col cuore appena spariti dagli annunci attivi — messaggio "💔 Non più
+  disponibile" con chi lo aveva salvato, a prescindere dai filtri di ricerca
+  (un ♥ conta più del filtro prezzo/zona). Se il ♥ viene tolto mentre la
+  notifica era in coda per le ore di silenzio, non parte: al drain si
+  ricontrolla che ci sia ancora almeno un ♥.
 - `rentwatch/bot.py` — long-poll `getUpdates`, risponde **solo** alle chat in
   `[[telegram.recipients]]`. Niente webhook, niente porte esposte. Rilegge il
   config a ogni messaggio, così un destinatario appena aggiunto parla subito.
