@@ -288,23 +288,15 @@ def create_app(cfg: dict) -> FastAPI:
         finally:
             conn.close()
 
-    def _set_flag(listing_id: int, column: str, value: bool):
-        conn = _connect(db_path)
-        try:
-            cur = conn.execute(
-                f"UPDATE listings SET {column} = ? WHERE id = ?",
-                (1 if value else 0, listing_id),
-            )
-            conn.commit()
-            if cur.rowcount == 0:
-                return JSONResponse(status_code=404, content={"error": "unknown listing"})
-            return {"id": listing_id, column: value}
-        finally:
-            conn.close()
-
     @app.post("/api/listings/{listing_id}/hidden")
     def set_hidden(listing_id: int, value: bool = True):
-        return _set_flag(listing_id, "hidden", value)
+        conn = _connect(db_path)
+        try:
+            if not db.set_hidden(conn, listing_id, value):
+                return JSONResponse(status_code=404, content={"error": "unknown listing"})
+            return {"id": listing_id, "hidden": value}
+        finally:
+            conn.close()
 
     @app.post("/api/listings/{listing_id}/liked")
     def set_liked(request: Request, listing_id: int, value: bool = True):

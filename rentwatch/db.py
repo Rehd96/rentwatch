@@ -191,6 +191,21 @@ def adopt_legacy_likes(conn: sqlite3.Connection, username: str) -> int:
     return cur.rowcount
 
 
+def is_favourite(conn: sqlite3.Connection, listing_id: int, username: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM favourites WHERE listing_id = ? AND username = ?",
+        (listing_id, username)).fetchone() is not None
+
+
+def set_hidden(conn: sqlite3.Connection, listing_id: int, value: bool) -> bool:
+    """Discard/restore a listing. Shared across everyone — see CLAUDE.md on
+    why ✕ is a joint decision while ♥ stays per-user. False if unknown id."""
+    cur = conn.execute("UPDATE listings SET hidden = ? WHERE id = ?",
+                       (1 if value else 0, listing_id))
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def set_favourite(conn: sqlite3.Connection, listing_id: int, username: str,
                   value: bool) -> bool:
     """Add or remove one person's heart. False if the listing does not exist."""

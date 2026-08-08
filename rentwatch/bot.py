@@ -210,8 +210,12 @@ def user_for_chat(cfg: dict, chat_id: str | None) -> str:
 
 
 def _handle_callback(cfg: dict, conn, cq: dict, allowed: set[str]) -> None:
-    """A tap on the ❤️ button under a notification — same effect as the
-    dashboard's heart, so a listing can be saved without leaving Telegram."""
+    """A tap on the ♥ or ✕ button under a notification — same effect as the
+    dashboard, so a listing can be saved or discarded without leaving Telegram.
+
+    ♥ is per-user (needs the chat linked via --user); ✕ is shared, like the
+    dashboard's own discard, so anyone in the recipients list can use it.
+    """
     token = cfg.get("telegram", {}).get("bot_token")
     data = cq.get("data") or ""
     message = cq.get("message") or {}
@@ -219,37 +223,49 @@ def _handle_callback(cfg: dict, conn, cq: dict, allowed: set[str]) -> None:
     message_id = message.get("message_id")
     answer = {"callback_query_id": cq["id"]}
 
-    if chat_id not in allowed or not data.startswith("fav:"):
+    action, _, raw_id = data.partition(":")
+    if chat_id not in allowed or action not in ("fav", "hide") or not raw_id.isdigit():
         notify.call(token, "answerCallbackQuery", answer)
         return
+    listing_id = int(raw_id)
 
-    listing_id = int(data.split(":", 1)[1])
-    username = user_for_chat(cfg, chat_id)
-    if not username:
-        answer["text"] = ("Questa chat non è collegata a un account dashboard — "
-                          "python -m rentwatch telegram-add-chat --chat-id "
-                          f"{chat_id} --user <account>")
-        answer["show_alert"] = True
-        notify.call(token, "answerCallbackQuery", answer)
-        return
+    if action == "fav":
+        username = user_for_chat(cfg, chat_id)
+        if not username:
+            answer["text"] = ("Questa chat non è collegata a un account dashboard — "
+                              "python -m rentwatch telegram-add-chat --chat-id "
+                              f"{chat_id} --user <account>")
+            answer["show_alert"] = True
+            notify.call(token, "answerCallbackQuery", answer)
+            return
+        now_liked = not db.is_favourite(conn, listing_id, username)
+        if not db.set_favourite(conn, listing_id, username, now_liked):
+            answer["text"] = "Annuncio non più in archivio."
+            notify.call(token, "answerCallbackQuery", answer)
+            return
+        answer["text"] = "❤️ Aggiunto ai preferiti" if now_liked else "🤍 Rimosso dai preferiti"
+    else:
+        listing = db.get_listing(conn, listing_id)
+        if not listing:
+            answer["text"] = "Annuncio non più in archivio."
+            notify.call(token, "answerCallbackQuery", answer)
+            return
+        now_hidden = not listing["hidden"]
+        db.set_hidden(conn, listing_id, now_hidden)
+        answer["text"] = "✕ Annuncio scartato" if now_hidden else "↺ Annuncio ripristinato"
 
-    was_liked = conn.execute(
-        "SELECT 1 FROM favourites WHERE listing_id = ? AND username = ?",
-        (listing_id, username)).fetchone() is not None
-    now_liked = not was_liked
-    if not db.set_favourite(conn, listing_id, username, now_liked):
-        answer["text"] = "Annuncio non più in archivio."
-        notify.call(token, "answerCallbackQuery", answer)
-        return
-
-    answer["text"] = "❤️ Aggiunto ai preferiti" if now_liked else "🤍 Rimosso dai preferiti"
     notify.call(token, "answerCallbackQuery", answer)
-    if message_id:
-        notify.call(token, "editMessageReplyMarkup", {
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "reply_markup": notify.like_keyboard(listing_id, liked=now_liked),
-        })
+    if not message_id:
+        return
+    listing = db.get_listing(conn, listing_id)
+    username = user_for_chat(cfg, chat_id)
+    liked = bool(username and db.is_favourite(conn, listing_id, username))
+    notify.call(token, "editMessageReplyMarkup", {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "reply_markup": notify.listing_keyboard(
+            listing_id, liked=liked, hidden=bool(listing and listing["hidden"])),
+    })
 
 
 def handle(cfg: dict, conn, text: str, chat_id: str | None = None) -> str | None:

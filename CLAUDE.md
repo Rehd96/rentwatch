@@ -52,16 +52,18 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + login su
 - `rentwatch/notify.py` — Telegram: filtri, template, ore di silenzio, ribassi.
   In ore di silenzio le notifiche finiscono in `notify_queue` e partono al primo
   run utile — non si perdono. Ogni messaggio di un nuovo annuncio/ribasso porta
-  un bottone inline `like_keyboard()` (callback_data `fav:<id>`): mettere ♥
-  senza uscire da Telegram, niente copia-incolla dell'indirizzo sul sito.
+  un bottone inline `listing_keyboard()` (callback_data `fav:<id>`/`hide:<id>`):
+  mettere ♥ o scartare ✕ senza uscire da Telegram, niente copia-incolla
+  dell'indirizzo sul sito.
 - `rentwatch/bot.py` — long-poll `getUpdates`, risponde **solo** alle chat in
   `[[telegram.recipients]]`. Niente webhook, niente porte esposte. Rilegge il
   config a ogni messaggio, così un destinatario appena aggiunto parla subito.
-  `_handle_callback()` gestisce i tap sul bottone ♥: legge `user_for_chat()`
+  `_handle_callback()` gestisce i tap sui bottoni ♥/✕: ♥ legge `user_for_chat()`
   per sapere di chi è il cuore (serve `--user` su quella chat, altrimenti
-  risponde con l'istruzione per collegarla), fa il toggle in `favourites` e
-  aggiorna l'etichetta del bottone con `editMessageReplyMarkup` — nessuno
-  storage aggiuntivo: chat_id e message_id arrivano già nel callback.
+  risponde con l'istruzione per collegarla) e fa il toggle in `favourites`; ✕
+  è condiviso come sul sito (`db.set_hidden()`), non serve un account collegato.
+  Ogni tap aggiorna l'etichetta dei bottoni con `editMessageReplyMarkup` —
+  nessuno storage aggiuntivo: chat_id e message_id arrivano già nel callback.
 - **Destinatari multipli**: `[[telegram.recipients]]` (`chat_id` + `user`
   facoltativo che collega la chat a un account). `send_message()` senza
   `chat_id` manda a tutti e torna True se almeno uno ha ricevuto — una chat

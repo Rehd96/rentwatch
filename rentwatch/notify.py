@@ -109,11 +109,15 @@ def send_message(cfg: dict, text: str, chat_id: str | None = None,
     return delivered > 0
 
 
-def like_keyboard(listing_id: int, liked: bool = False) -> dict:
-    """Inline button so a heart can be tapped from the notification itself —
+def listing_keyboard(listing_id: int, liked: bool = False, hidden: bool = False) -> dict:
+    """Inline buttons so ♥ and ✕ can be tapped from the notification itself —
     no copying the address into the dashboard's search box."""
-    label = "💔 Rimuovi dai preferiti" if liked else "🤍 Preferiti"
-    return {"inline_keyboard": [[{"text": label, "callback_data": f"fav:{listing_id}"}]]}
+    fav = "💔 Rimuovi dai preferiti" if liked else "🤍 Preferiti"
+    discard = "↺ Ripristina" if hidden else "✕ Scarta"
+    return {"inline_keyboard": [[
+        {"text": fav, "callback_data": f"fav:{listing_id}"},
+        {"text": discard, "callback_data": f"hide:{listing_id}"},
+    ]]}
 
 
 def known_chats(token: str) -> list[dict]:
@@ -312,7 +316,7 @@ def notify(conn, cfg: dict, new_listings: list[dict],
     sent = 0
     for item in pending[:cap]:
         text = format_listing(item["listing"], template, item["kind"], item["old_price"])
-        if send_message(cfg, text, reply_markup=like_keyboard(item["listing"]["id"])):
+        if send_message(cfg, text, reply_markup=listing_keyboard(item["listing"]["id"])):
             sent += 1
 
     if len(pending) > cap:
