@@ -215,6 +215,11 @@ def _handle_callback(cfg: dict, conn, cq: dict, allowed: set[str]) -> None:
 
     ♥ is per-user (needs the chat linked via --user); ✕ is shared, like the
     dashboard's own discard, so anyone in the recipients list can use it.
+
+    ✕ deletes the notification outright instead of just relabelling its
+    button — editMessageReplyMarkup alone is easy to miss (only the button
+    text changes), and a discarded listing has no reason to keep sitting in
+    the chat.
     """
     token = cfg.get("telegram", {}).get("bot_token")
     data = cq.get("data") or ""
@@ -244,28 +249,29 @@ def _handle_callback(cfg: dict, conn, cq: dict, allowed: set[str]) -> None:
             notify.call(token, "answerCallbackQuery", answer)
             return
         answer["text"] = "❤️ Aggiunto ai preferiti" if now_liked else "🤍 Rimosso dai preferiti"
-    else:
-        listing = db.get_listing(conn, listing_id)
-        if not listing:
-            answer["text"] = "Annuncio non più in archivio."
-            notify.call(token, "answerCallbackQuery", answer)
+        notify.call(token, "answerCallbackQuery", answer)
+        if not message_id:
             return
-        now_hidden = not listing["hidden"]
-        db.set_hidden(conn, listing_id, now_hidden)
-        answer["text"] = "✕ Annuncio scartato" if now_hidden else "↺ Annuncio ripristinato"
-
-    notify.call(token, "answerCallbackQuery", answer)
-    if not message_id:
+        listing = db.get_listing(conn, listing_id)
+        liked = bool(username and db.is_favourite(conn, listing_id, username))
+        notify.call(token, "editMessageReplyMarkup", {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reply_markup": notify.listing_keyboard(
+                listing_id, liked=liked, hidden=bool(listing and listing["hidden"])),
+        })
         return
+
     listing = db.get_listing(conn, listing_id)
-    username = user_for_chat(cfg, chat_id)
-    liked = bool(username and db.is_favourite(conn, listing_id, username))
-    notify.call(token, "editMessageReplyMarkup", {
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "reply_markup": notify.listing_keyboard(
-            listing_id, liked=liked, hidden=bool(listing and listing["hidden"])),
-    })
+    if not listing:
+        answer["text"] = "Annuncio non più in archivio."
+        notify.call(token, "answerCallbackQuery", answer)
+        return
+    db.set_hidden(conn, listing_id, True)
+    answer["text"] = "✕ Annuncio scartato"
+    notify.call(token, "answerCallbackQuery", answer)
+    if message_id:
+        notify.call(token, "deleteMessage", {"chat_id": chat_id, "message_id": message_id})
 
 
 def handle(cfg: dict, conn, text: str, chat_id: str | None = None) -> str | None:

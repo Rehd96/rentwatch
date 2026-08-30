@@ -67,10 +67,13 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + login su
   config a ogni messaggio, così un destinatario appena aggiunto parla subito.
   `_handle_callback()` gestisce i tap sui bottoni ♥/✕: ♥ legge `user_for_chat()`
   per sapere di chi è il cuore (serve `--user` su quella chat, altrimenti
-  risponde con l'istruzione per collegarla) e fa il toggle in `favourites`; ✕
-  è condiviso come sul sito (`db.set_hidden()`), non serve un account collegato.
-  Ogni tap aggiorna l'etichetta dei bottoni con `editMessageReplyMarkup` —
-  nessuno storage aggiuntivo: chat_id e message_id arrivano già nel callback.
+  risponde con l'istruzione per collegarla), fa il toggle in `favourites` e
+  aggiorna l'etichetta del bottone con `editMessageReplyMarkup`; ✕ è condiviso
+  come sul sito (`db.set_hidden()`, sempre a `True` — un tap non lo riattiva),
+  non serve un account collegato, e invece di aggiornare il bottone cancella
+  il messaggio con `deleteMessage`: relabeling da solo passava inosservato,
+  un annuncio scartato non ha motivo di restare in chat. Nessuno storage
+  aggiuntivo: chat_id e message_id arrivano già nel callback.
 - **Destinatari multipli**: `[[telegram.recipients]]` (`chat_id` + `user`
   facoltativo che collega la chat a un account). `send_message()` senza
   `chat_id` manda a tutti e torna True se almeno uno ha ricevuto — una chat
