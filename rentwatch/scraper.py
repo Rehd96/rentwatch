@@ -27,6 +27,7 @@ DEFAULT_PARAMS = {
     "__lang": "it",
     # required by the endpoint; without it the API returns a 500
     "paramsCount": "1",
+    "path": "/affitto-case/torino/",
 }
 
 
@@ -89,6 +90,24 @@ PAGES_PER_SESSION = 40          # rotate the session periodically to stay polite
 RETRY_BACKOFF = (30, 90)        # seconds, one per retry attempt
 
 
+PAGE_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+API_HEADERS = {
+    "Accept": "application/json",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+}
+
+
 class ImmobiliareScraper:
     def __init__(self, delay: tuple[float, float] = (1.5, 3.0)):
         self.delay = delay
@@ -97,6 +116,10 @@ class ImmobiliareScraper:
 
     def _new_session(self):
         self.session = requests.Session(impersonate="chrome")
+        try:
+            self.session.get("https://www.immobiliare.it/", headers=PAGE_HEADERS, timeout=15)
+        except Exception as e:
+            log.warning("could not warm up session cookie: %s", e)
 
     def fetch_page(self, params: dict, page: int) -> dict:
         query = {**DEFAULT_PARAMS, **params, "pag": str(page)}
@@ -108,10 +131,14 @@ class ImmobiliareScraper:
                             last_err, backoff, attempt)
                 time.sleep(backoff)
                 self._new_session()
+            headers = {
+                **API_HEADERS,
+                "Referer": referer,
+            }
             r = self.session.get(
                 API_URL,
                 params=query,
-                headers={"Accept": "application/json", "Referer": referer},
+                headers=headers,
                 timeout=30,
             )
             if r.status_code == 200:
