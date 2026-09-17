@@ -1,10 +1,12 @@
-"""Client for immobiliare.it's internal search API.
+"""Client for immobiliare.it search.
 
-The site is a Next.js app; the same JSON the frontend hydrates from is served
-by /api-next/search-list/listings/. Plain HTTP clients get a 403 from the
-TLS-fingerprint check, so we go through curl_cffi with Chrome impersonation.
+The site is a Next.js app; the listings are embedded in __NEXT_DATA__ on the
+search pages. Direct requests to the internal /api-next/ JSON endpoint get
+blocked by DataDome (403 captcha), so we fetch the HTML pages with Chrome
+impersonation via curl_cffi and extract the dehydrated query state.
 """
 
+import json
 import logging
 import random
 import time
@@ -14,21 +16,8 @@ from curl_cffi import requests
 
 log = logging.getLogger(__name__)
 
-API_URL = "https://www.immobiliare.it/api-next/search-list/listings/"
-
-# Torino city, residential rentals. idContratto: 1=sale, 2=rent.
-DEFAULT_PARAMS = {
-    "fkRegione": "pie",
-    "idProvincia": "TO",
-    "idComune": "9987",
-    "idNazione": "IT",
-    "idContratto": "2",
-    "idCategoria": "1",
-    "__lang": "it",
-    # required by the endpoint; without it the API returns a 500
-    "paramsCount": "1",
-    "path": "/affitto-case/torino/",
-}
+BASE_URL = "https://www.immobiliare.it"
+DEFAULT_PATH = "/affitto-case/torino/"
 
 
 class ScrapeError(RuntimeError):
@@ -78,7 +67,35 @@ def parse_listing(item: dict) -> dict | None:
     }
 
 
-# The API hard-caps every search at 80 pages (2000 results) and answers 418
+def extract_next_data(html: str) -> dict:
+    marker = '<script id="__NEXT_DATA__"'
+    start = html.find(marker)
+    if start == -1:
+        raise ScrapeError('could not find <script id="__NEXT_DATA__"> in HTML')
+    content_start = html.find(">", start) + 1
+    end = html.find("</script>", content_start)
+    if end == -1:
+        raise ScrapeError("could not find closing </script> for __NEXT_DATA__")
+    try:
+        payload = json.loads(html[content_start:end])
+    except Exception as exc:
+        raise ScrapeError(f"failed to parse __NEXT_DATA__ JSON: {exc}")
+
+    queries = (payload.get("props") or {}).get("pageProps", {}).get("dehydratedState", {}).get("queries", [])
+    for q in queries:
+        key = q.get("queryKey")
+        if isinstance(key, list) and key and key[0] == "real-estate-list":
+            qd = (q.get("state") or {}).get("data")
+            if isinstance(qd, dict):
+                return qd
+    for q in queries:
+        qd = (q.get("state") or {}).get("data")
+        if isinstance(qd, dict) and "results" in qd and "count" in qd:
+            return qd
+    raise ScrapeError("could not find real-estate-list in dehydratedState")
+
+
+# The API hard-caps every search at 80 pages (2000 results) and answers 404/418
 # beyond it — maxPages lies. Searches with more results get partitioned into
 # price bands that each fit under the cap.
 HARD_PAGE_CAP = 80
@@ -88,23 +105,10 @@ PRICE_LADDER = [400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1400,
 
 PAGES_PER_SESSION = 40          # rotate the session periodically to stay polite
 RETRY_BACKOFF = (30, 90)        # seconds, one per retry attempt
+BROWSERS = ("chrome", "safari", "safari17_0")
 
-
-PAGE_HEADERS = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+REQUEST_HEADERS = {
     "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
-}
-
-API_HEADERS = {
-    "Accept": "application/json",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-origin",
 }
 
 
@@ -112,33 +116,38 @@ class ImmobiliareScraper:
     def __init__(self, delay: tuple[float, float] = (1.5, 3.0)):
         self.delay = delay
         self._pages_fetched = 0
+        self._browser_idx = 0
         self._new_session()
 
-    def _new_session(self):
-        self.session = requests.Session(impersonate="chrome")
-        try:
-            self.session.get("https://www.immobiliare.it/", headers=PAGE_HEADERS, timeout=15)
-        except Exception as e:
-            log.warning("could not warm up session cookie: %s", e)
+    def _new_session(self, browser: str | None = None):
+        if browser is None:
+            browser = BROWSERS[self._browser_idx % len(BROWSERS)]
+        self.current_browser = browser
+        self.session = requests.Session(impersonate=browser)
 
     def fetch_page(self, params: dict, page: int) -> dict:
-        query = {**DEFAULT_PARAMS, **params, "pag": str(page)}
-        referer = "https://www.immobiliare.it" + query.get("path", "/affitto-case/torino/")
+        query = dict(params)
+        path = query.pop("path", DEFAULT_PATH)
+        if not path.startswith("/"):
+            path = "/" + path
+        query.pop("paramsCount", None)
+        query["pag"] = str(page)
+
+        url = f"{BASE_URL}{path}"
         last_err = None
         for attempt, backoff in enumerate((0, *RETRY_BACKOFF)):
             if backoff:
-                log.warning("%s — backing off %ds and rotating session (retry %d)",
-                            last_err, backoff, attempt)
+                self._browser_idx += 1
+                next_browser = BROWSERS[self._browser_idx % len(BROWSERS)]
+                log.warning("%s — backing off %ds and switching to %s (retry %d)",
+                            last_err, backoff, next_browser, attempt)
                 time.sleep(backoff)
-                self._new_session()
-            headers = {
-                **API_HEADERS,
-                "Referer": referer,
-            }
+                self._new_session(next_browser)
+
             r = self.session.get(
-                API_URL,
+                url,
                 params=query,
-                headers=headers,
+                headers=REQUEST_HEADERS,
                 timeout=30,
             )
             if r.status_code == 200:
@@ -149,7 +158,11 @@ class ImmobiliareScraper:
                              self._pages_fetched, pause)
                     time.sleep(pause)
                     self._new_session()
-                return r.json()
+                try:
+                    return extract_next_data(r.text)
+                except ScrapeError as exc:
+                    last_err = f"Failed to parse page {page}: {exc}"
+                    continue
             last_err = f"HTTP {r.status_code} on page {page}: {r.text[:120]}"
             if r.status_code not in (403, 418, 429) and r.status_code < 500:
                 break  # 4xx we can't fix by waiting
