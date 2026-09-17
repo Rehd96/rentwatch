@@ -8,7 +8,7 @@
 <style>
   :root {
     --bg: #0f1115; --card: #171a21; --line: #262b36;
-    --fg: #e8eaf0; --muted: #8b93a7; --accent: #4f9cf9; --error: #ff6b6b;
+    --fg: #e8eaf0; --muted: #9ba3b7; --accent: #4f9cf9; --error: #ff6b6b;
   }
   @media (prefers-color-scheme: light) {
     :root {
@@ -24,13 +24,16 @@
   }
   .card {
     width: 100%; max-width: 22rem; background: var(--card);
-    border: 1px solid var(--line); border-radius: 14px; padding: 1.75rem;
+    border: 1px solid var(--line); border-radius: 16px; padding: 2rem;
+    box-shadow: 0 22px 60px rgba(0,0,0,.18);
   }
-  h1 { margin: 0 0 .25rem; font-size: 1.25rem; letter-spacing: -.01em; }
+  .mark { width: 2.5rem; height: 2.5rem; display: grid; place-items: center; border-radius: 11px;
+          background: color-mix(in srgb, var(--accent) 16%, transparent); margin-bottom: 1rem; font-size: 1.25rem; }
+  h1 { margin: 0 0 .25rem; font-size: 1.4rem; letter-spacing: -.02em; }
   p.sub { margin: 0 0 1.5rem; color: var(--muted); font-size: .875rem; }
   label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: .35rem; }
   input {
-    width: 100%; padding: .6rem .7rem; margin-bottom: 1rem; font: inherit;
+    width: 100%; padding: .7rem .75rem; margin-bottom: 1rem; font: inherit;
     background: var(--bg); color: var(--fg);
     border: 1px solid var(--line); border-radius: 8px;
   }
@@ -41,6 +44,11 @@
     cursor: pointer;
   }
   button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .7; cursor: progress; }
+  .password-wrap { position: relative; }
+  .password-wrap input { padding-right: 4.5rem; }
+  .toggle-password { position: absolute; right: .35rem; top: .35rem; width: auto; padding: .35rem .5rem;
+                     color: var(--muted); background: transparent; font-size: .78rem; font-weight: 500; }
   .error {
     background: color-mix(in srgb, var(--error) 12%, transparent);
     border: 1px solid var(--error); color: var(--error);
@@ -51,20 +59,43 @@
 </style>
 </head>
 <body>
-  <form class="card" method="post" action="__BASE__login">
+  <form class="card" id="loginForm" method="post" action="__BASE__login">
+    <div class="mark" aria-hidden="true">🏠</div>
     <h1>rentwatch</h1>
-    <p class="sub">Affitti Torino — accesso riservato</p>
+    <p class="sub">La tua ricerca casa, aggiornata.</p>
 
-    <div class="error">__ERROR__</div>
+    <div class="error" role="alert">__ERROR__</div>
 
     <label for="username">Utente</label>
-    <input id="username" name="username" autocomplete="username" autofocus required>
+    <input id="username" name="username" autocomplete="username" autocapitalize="none"
+           spellcheck="false" autofocus required>
 
     <label for="password">Password</label>
-    <input id="password" name="password" type="password"
-           autocomplete="current-password" required>
+    <div class="password-wrap">
+      <input id="password" name="password" type="password"
+             autocomplete="current-password" required>
+      <button class="toggle-password" id="togglePassword" type="button"
+              aria-label="Mostra password" aria-pressed="false">Mostra</button>
+    </div>
 
-    <button type="submit">Entra</button>
+    <button id="submitButton" type="submit">Entra</button>
   </form>
+<script>
+const password = document.getElementById("password");
+const toggle = document.getElementById("togglePassword");
+toggle.addEventListener("click", () => {
+  const visible = password.type === "text";
+  password.type = visible ? "password" : "text";
+  toggle.textContent = visible ? "Mostra" : "Nascondi";
+  toggle.setAttribute("aria-label", visible ? "Mostra password" : "Nascondi password");
+  toggle.setAttribute("aria-pressed", String(!visible));
+  password.focus();
+});
+document.getElementById("loginForm").addEventListener("submit", () => {
+  const button = document.getElementById("submitButton");
+  button.textContent = "Accesso…";
+  setTimeout(() => { button.disabled = true; }, 0);
+});
+</script>
 </body>
 </html>

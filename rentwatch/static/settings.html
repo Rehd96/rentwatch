@@ -9,28 +9,30 @@
   :root {
     --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e;
     --muted: #898781; --border: rgba(11,11,11,0.10); --accent: #2a78d6;
-    --good: #006300; --bad: #d03b3b;
+    --accent-soft: #e8f2ff; --good: #006300; --bad: #d03b3b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --page: #0d0d0d; --surface: #1a1a19; --ink: #fff; --ink-2: #c3c2b7;
       --muted: #898781; --border: rgba(255,255,255,0.10); --accent: #3987e5;
-      --good: #0ca30c; --bad: #e66767;
+      --accent-soft: #142b48; --good: #0ca30c; --bad: #e66767;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--page); color: var(--ink);
          font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .wrap { max-width: 780px; margin: 0 auto; padding: 20px 16px 80px; }
-  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
-  header h1 { font-size: 20px; margin: 0; }
+  :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 2px; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 24px 16px 100px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  header h1 { font-size: 22px; margin: 0; letter-spacing: -.02em; }
   header a { color: var(--accent); text-decoration: none; font-size: 13px; }
   header a:hover { text-decoration: underline; }
   header .spacer { margin-left: auto; }
 
+  .intro { color: var(--muted); margin: 0 0 24px; max-width: 620px; }
   fieldset { background: var(--surface); border: 1px solid var(--border);
-             border-radius: 10px; padding: 14px 16px; margin: 0 0 16px; }
-  legend { font-size: 13px; font-weight: 650; padding: 0 6px; }
+             border-radius: 12px; padding: 18px; margin: 0 0 18px; }
+  legend { font-size: 14px; font-weight: 700; padding: 0 7px; }
   .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
 
   .row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
@@ -40,6 +42,7 @@
     background: var(--page); color: var(--ink); border: 1px solid var(--border);
     border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; width: 100%;
   }
+  input:hover, textarea:hover, select:hover { border-color: var(--muted); }
   textarea { min-height: 92px; resize: vertical; font-family: ui-monospace, monospace; }
   .check { display: flex; align-items: center; gap: 7px; font-size: 13px;
            color: var(--ink-2); flex: 1 1 100%; }
@@ -52,19 +55,31 @@
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   button:disabled { opacity: .55; cursor: progress; }
 
-  .bar { position: sticky; bottom: 0; background: var(--page);
-         border-top: 1px solid var(--border); padding: 12px 0;
+  .bar { position: sticky; bottom: 12px; background: color-mix(in srgb, var(--surface) 94%, transparent);
+         border: 1px solid var(--border); border-radius: 12px; padding: 10px;
          display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .msg { font-size: 13px; }
+  .msg { font-size: 13px; margin-left: auto; }
   .msg.ok { color: var(--good); }
   .msg.err { color: var(--bad); }
 
   code { background: var(--page); border: 1px solid var(--border);
          border-radius: 4px; padding: 1px 4px; font-size: 12px; }
-  .search { border: 1px dashed var(--border); border-radius: 8px;
-            padding: 10px 12px; margin-bottom: 10px; }
+  .search { border: 1px solid var(--border); background: var(--page); border-radius: 9px;
+            padding: 12px; margin-bottom: 10px; }
   .search .del { color: var(--bad); background: none; border: 0; cursor: pointer;
                  font-size: 12px; padding: 0; }
+  .unsaved { color: var(--accent); background: var(--accent-soft); border-radius: 999px;
+             padding: 3px 8px; font-size: 11px; font-weight: 650; }
+  .unsaved[hidden] { display: none; }
+  @media (max-width: 560px) {
+    .wrap { padding: 16px 10px 90px; }
+    header .spacer { display: none; }
+    header a:last-child { margin-left: auto; }
+    fieldset { padding: 14px 12px; }
+    .bar { bottom: 8px; }
+    .bar button { flex: 1; }
+    .msg { width: 100%; margin-left: 0; }
+  }
 </style>
 </head>
 <body>
@@ -75,6 +90,7 @@
     <span class="spacer"></span>
     <a href="__BASE__logout">esci (__USER__)</a>
   </header>
+  <p class="intro">Gestisci ricerche e notifiche. Le modifiche restano locali e diventano attive dopo il salvataggio.</p>
 
   <fieldset>
     <legend>Ricerca</legend>
@@ -88,8 +104,8 @@
 
   <fieldset>
     <legend>Telegram</legend>
-    <p class="hint">Crea il bot con <code>@BotFather</code> per il token, e
-      scrivi a <code>@userinfobot</code> per il tuo chat id.</p>
+    <p class="hint">Crea il bot con <code>@BotFather</code>, premi <b>Start</b> nella sua chat,
+      quindi usa “Chi ha scritto al bot?” per trovare il chat id.</p>
     <div class="row">
       <div class="check">
         <input type="checkbox" id="tg-enabled">
@@ -188,9 +204,10 @@
   </fieldset>
 
   <div class="bar">
-    <button class="primary" id="save">Salva</button>
+    <button class="primary" id="save" disabled>Salva modifiche</button>
     <button id="scrape">Esegui scrape adesso</button>
-    <span class="msg" id="msg"></span>
+    <span class="unsaved" id="unsaved" hidden>Modifiche non salvate</span>
+    <span class="msg" id="msg" role="status" aria-live="polite"></span>
   </div>
 </div>
 
@@ -198,11 +215,30 @@
 const BASE = "__BASE__";
 const $ = id => document.getElementById(id);
 let state = null;
+let dirty = false;
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 function msg(text, kind) {
   const el = $("msg");
   el.textContent = text;
   el.className = "msg " + (kind || "");
+}
+
+function setDirty(value) {
+  dirty = value;
+  $("unsaved").hidden = !value;
+  $("save").disabled = !value;
+}
+
+async function requestJSON(path, options) {
+  const res = await fetch(BASE + path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Errore ${res.status}`);
+  return data;
 }
 
 function recipientCard(recipient) {
@@ -211,18 +247,18 @@ function recipientCard(recipient) {
   box.innerHTML = `
     <div class="row">
       <div class="field"><label>Chat id</label>
-        <input type="text" class="r-chat" inputmode="numeric"></div>
+        <input type="text" class="r-chat" inputmode="numeric" aria-label="Chat id"></div>
       <div class="field"><label>Account (facoltativo)</label>
-        <select class="r-user"></select></div>
+        <select class="r-user" aria-label="Account collegato"></select></div>
     </div>
     <button type="button" class="del">rimuovi</button>`;
   box.querySelector(".r-chat").value = recipient.chat_id || "";
   const select = box.querySelector(".r-user");
   const names = (state && state.telegram && state.telegram.users) || [];
   select.innerHTML = `<option value="">— nessuno —</option>` +
-    names.map(n => `<option value="${n}">${n}</option>`).join("");
+    names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
   select.value = recipient.user || "";
-  box.querySelector(".del").onclick = () => box.remove();
+  box.querySelector(".del").onclick = () => { box.remove(); setDirty(true); };
   return box;
 }
 
@@ -241,9 +277,9 @@ function searchCard(search) {
   box.innerHTML = `
     <div class="row">
       <div class="field"><label>Nome</label>
-        <input type="text" class="s-name"></div>
+        <input type="text" class="s-name" placeholder="Torino, fino a 1.000 €"></div>
       <div class="field"><label>Percorso</label>
-        <input type="text" class="s-path"></div>
+        <input type="text" class="s-path" placeholder="/affitto-case/torino/"></div>
     </div>
     <div class="row">
       <div class="field"><label>Parametri (uno per riga, chiave=valore)</label>
@@ -253,7 +289,7 @@ function searchCard(search) {
   box.querySelector(".s-name").value = search.name || "";
   box.querySelector(".s-path").value = search.path || "";
   box.querySelector(".s-params").value = params;
-  box.querySelector(".del").onclick = () => box.remove();
+  box.querySelector(".del").onclick = () => { box.remove(); setDirty(true); };
   return box;
 }
 
@@ -307,6 +343,7 @@ function fill(data) {
   $("f-zones").value = (f.zones || []).join(", ");
   $("f-agencies").checked = !!f.exclude_agencies;
   $("f-suspect").checked = f.skip_suspect !== false;
+  setDirty(false);
 }
 
 function payload() {
@@ -336,57 +373,60 @@ function payload() {
 }
 
 async function post(path, body) {
-  const res = await fetch(BASE + path, {
+  return requestJSON(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body || {}),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
-  return data;
 }
 
-$("add-search").onclick = () =>
+$("add-search").onclick = () => {
   $("searches").appendChild(searchCard({ name: "", path: "/affitto-case/torino/", params: {} }));
+  setDirty(true);
+};
 
 $("save").onclick = async () => {
   $("save").disabled = true;
   msg("Salvataggio…");
   try {
-    await post("api/settings", payload());
+    const data = payload();
+    if (!data.searches.length) throw new Error("aggiungi almeno una ricerca valida");
+    await post("api/settings", data);
     $("tg-token").value = "";
     msg("Salvato. Vale dal prossimo scrape.", "ok");
-    fill(await (await fetch(BASE + "api/settings")).json());
+    fill(await requestJSON("api/settings"));
   } catch (e) {
     msg("Errore: " + e.message, "err");
   } finally {
-    $("save").disabled = false;
+    $("save").disabled = !dirty;
   }
 };
 
-$("add-recipient").onclick = () =>
+$("add-recipient").onclick = () => {
   $("recipients").appendChild(recipientCard({ chat_id: "", user: "" }));
+  setDirty(true);
+};
 
 $("find-chats").onclick = async () => {
   $("find-chats").disabled = true;
   const box = $("chat-candidates");
   box.textContent = "Chiedo a Telegram…";
   try {
-    const r = await (await fetch(BASE + "api/telegram-chats")).json();
-    if (r.error) { box.textContent = r.error; return; }
+    const r = await requestJSON("api/telegram-chats");
     if (!(r.chats || []).length) {
       box.textContent = "Nessuno ha ancora scritto al bot. Apritelo su Telegram " +
         "e premete Start, poi riprovate.";
       return;
     }
     box.innerHTML = "Tocca per usarlo: " + r.chats.map(c =>
-      `<button type="button" class="pick" data-id="${c.id}">${c.id} (${c.type}${c.name ? " " + c.name : ""})</button>`
+      `<button type="button" class="pick" data-id="${esc(c.id)}">${esc(c.id)} (${esc(c.type)}${c.name ? " " + esc(c.name) : ""})</button>`
     ).join(" ");
     box.querySelectorAll(".pick").forEach(b => b.onclick = () => {
       const empty = [...document.querySelectorAll("#recipients .r-chat")]
         .find(i => !i.value.trim());
       if (empty) { empty.value = b.dataset.id; }
       else { $("recipients").appendChild(recipientCard({ chat_id: b.dataset.id })); }
+      setDirty(true);
     });
   } catch (e) {
     box.textContent = "Errore: " + e.message;
@@ -421,8 +461,25 @@ $("scrape").onclick = async () => {
   }
 };
 
-fetch(BASE + "api/settings")
-  .then(r => r.json())
+document.querySelector(".wrap").addEventListener("input", () => {
+  if (state) setDirty(true);
+});
+document.querySelector(".wrap").addEventListener("change", () => {
+  if (state) setDirty(true);
+});
+window.addEventListener("beforeunload", e => {
+  if (!dirty) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s" && dirty) {
+    e.preventDefault();
+    $("save").click();
+  }
+});
+
+requestJSON("api/settings")
   .then(fill)
   .catch(e => msg("Impossibile caricare le impostazioni: " + e.message, "err"));
 </script>

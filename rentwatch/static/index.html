@@ -42,14 +42,20 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0; background: var(--page); color: var(--ink);
     font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  button, input, select { accent-color: var(--accent); }
+  :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 2px; }
+  .skip-link { position: fixed; top: 8px; left: 8px; z-index: 2000; transform: translateY(-150%);
+               background: var(--ink); color: var(--page); padding: 8px 12px; border-radius: 7px; }
+  .skip-link:focus { transform: none; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 70px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
   .header-main { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  header h1 { font-size: 20px; margin: 0; }
+  header h1 { font-size: 21px; margin: 0; letter-spacing: -.02em; }
   header .sub { color: var(--muted); font-size: 13px; }
   .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   header .navlinks { display: flex; gap: 14px; }
@@ -67,28 +73,48 @@
   .btn-scrape.spinning .spin-icon { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { 100% { transform: rotate(360deg); } }
 
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
-  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; }
   .tile .label { color: var(--ink-2); font-size: 12px; }
   .tile .value { font-size: 30px; font-weight: 650; margin-top: 2px; }
   .tile .hint { color: var(--muted); font-size: 12px; }
+  .tile.loading .value { color: var(--grid); }
 
-  .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-             background: var(--surface); border: 1px solid var(--border);
-             border-radius: 10px; padding: 10px 12px; margin-bottom: 18px; }
-  .filters label { color: var(--ink-2); font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .filter-panel { background: var(--surface); border: 1px solid var(--border);
+                  border-radius: 12px; padding: 14px; margin-bottom: 18px; }
+  .filter-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .filter-head h2 { margin: 0; font-size: 14px; }
+  .filter-actions { display: flex; align-items: center; gap: 10px; }
+  .active-filters { color: var(--accent); font-size: 12px; font-weight: 600; }
+  .filters { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; align-items: end; }
+  .filters label { color: var(--ink-2); font-size: 11.5px; display: flex; flex-direction: column; gap: 4px; }
   .filters input[type=number], .filters input[type=search], .filters select {
     background: var(--page); color: var(--ink); border: 1px solid var(--border);
-    border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13px; width: 85px;
+    border-radius: 7px; padding: 7px 9px; font: inherit; font-size: 13px; width: 100%; min-height: 36px;
   }
-  .filters input[type=search] { width: 170px; }
-  .filters select { width: auto; max-width: 210px; }
-  .filters .count { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 500; }
+  .filters input:hover, .filters select:hover { border-color: var(--baseline); }
+  .filters .search-field { grid-column: span 2; }
+  .filter-toggles { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  .filter-toggles label { display: inline-flex; align-items: center; gap: 6px;
+                          border: 1px solid var(--border); border-radius: 999px; padding: 6px 10px;
+                          color: var(--ink-2); font-size: 12px; cursor: pointer; user-select: none; }
+  .filter-toggles label:has(input:checked) { border-color: var(--accent); color: var(--accent);
+                                             background: color-mix(in srgb, var(--accent) 8%, transparent); }
   .btn-reset {
     background: none; border: 1px solid var(--border); border-radius: 6px;
     color: var(--muted); font: inherit; font-size: 12px; padding: 4px 8px; cursor: pointer;
   }
   .btn-reset:hover { color: var(--ink); border-color: var(--ink-2); }
+  .btn-reset:disabled { opacity: .45; cursor: default; }
+
+  .insights { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 20px; }
+  .insights summary { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+                      padding: 12px 14px; cursor: pointer; font-weight: 650; list-style: none; }
+  .insights summary::-webkit-details-marker { display: none; }
+  .insights summary::after { content: "+"; color: var(--muted); font-size: 18px; font-weight: 400; }
+  .insights[open] summary::after { content: "−"; }
+  .insights .summary-note { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: auto; }
+  .insights .chart { border: 0; border-top: 1px solid var(--grid); border-radius: 0 0 12px 12px; }
 
   .section-head { display: flex; align-items: center; justify-content: space-between; margin: 24px 0 10px; flex-wrap: wrap; gap: 10px; }
   .section-head h2 { font-size: 15px; margin: 0; }
@@ -106,6 +132,7 @@
   .view-tab.active {
     background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;
   }
+  .result-meta { color: var(--muted); font-size: 12.5px; font-weight: 500; margin-left: 8px; }
 
   /* zone chart */
   .chart { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
@@ -127,9 +154,12 @@
   .tablewrap { overflow-x: auto; border-radius: 10px; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid);
            font-size: 13px; vertical-align: middle; }
-  th { color: var(--ink-2); font-size: 12px; font-weight: 600; cursor: pointer; user-select: none;
+  th { color: var(--ink-2); font-size: 12px; font-weight: 600; cursor: default; user-select: none;
        white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
   th .arrow { color: var(--accent); }
+  .sort-button { border: 0; background: none; color: inherit; font: inherit; font-weight: inherit;
+                 cursor: pointer; padding: 2px; white-space: nowrap; }
+  th.num .sort-button { width: 100%; text-align: right; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   td img { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; display: block;
            background: var(--grid); }
@@ -205,6 +235,16 @@
           border: 1px solid var(--border); border-radius: 8px; padding: 8px 18px; font: inherit; cursor: pointer; }
   .more:hover { border-color: var(--accent); }
 
+  .empty-state { background: var(--surface); border: 1px dashed var(--baseline); border-radius: 12px;
+                 text-align: center; padding: 44px 20px; color: var(--ink-2); }
+  .empty-state strong { display: block; color: var(--ink); font-size: 16px; margin-bottom: 4px; }
+  .page-status { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px);
+                 background: var(--ink); color: var(--page); border-radius: 9px; padding: 9px 13px;
+                 box-shadow: 0 8px 28px rgba(0,0,0,.22); opacity: 0; pointer-events: none;
+                 transition: opacity .2s, transform .2s; z-index: 1500; max-width: min(460px, calc(100vw - 24px)); }
+  .page-status.show { opacity: 1; transform: translate(-50%, 0); }
+  .page-status.error { background: var(--bad); color: white; }
+
   #tooltip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink);
              border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 12.5px;
              box-shadow: 0 4px 14px rgba(0,0,0,0.18); display: none; z-index: 1000; max-width: 260px; }
@@ -215,17 +255,31 @@
     .wrap { padding: 12px 10px 40px; }
     header { flex-direction: column; align-items: stretch; gap: 10px; }
     .header-actions { justify-content: space-between; }
-    .filters { gap: 6px; }
-    .filters input[type=number] { width: 75px; }
-    .filters input[type=search] { width: 100%; }
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .tile .value { font-size: 24px; }
+    .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .filters .search-field { grid-column: 1 / -1; }
+    .filter-toggles { gap: 6px; }
+    .filter-toggles label { flex: 1 1 auto; justify-content: center; }
     .chart .rowz { grid-template-columns: 120px 1fr 75px; gap: 6px; }
     .chart .zname { font-size: 11.5px; }
     .chart .zval { font-size: 11.5px; }
     #mapView { height: 450px; }
+    .insights .summary-note { display: none; }
+    .cards-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 420px) {
+    .wrap { padding-inline: 8px; }
+    .header-actions { align-items: stretch; }
+    .btn-scrape { justify-content: center; flex: 1; }
+    header .navlinks { justify-content: flex-end; }
+    .filter-panel { padding: 12px; }
+    .view-tab { padding-inline: 9px; }
   }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#listings">Vai agli annunci</a>
 <div class="wrap">
   <header>
     <div class="header-main">
@@ -238,52 +292,64 @@
       </button>
       <span class="navlinks">
         <a href="__BASE__settings">impostazioni</a>
-        <a href="__BASE__logout">esci (__USER__)</a>
+        <a href="__BASE__logout">esci (<span id="currentUser">__USER__</span>)</a>
       </span>
     </div>
   </header>
 
-  <div class="tiles" id="tiles"></div>
-
-  <div class="filters">
-    <label>€ max <input type="number" id="fMaxPrice" placeholder="es. 900" step="50"></label>
-    <label>€ min <input type="number" id="fMinPrice" placeholder="0" step="50"></label>
-    <label>m² min <input type="number" id="fMinSurface" placeholder="es. 50" step="5"></label>
-    <label>locali min
-      <select id="fRooms"><option value="">tutti</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
-    </label>
-    <label>zona <select id="fZone"><option value="">tutte</option></select></label>
-    <label>novità
-      <select id="fNew">
-        <option value="">tutti</option>
-        <option value="1">nuovi (24h)</option>
-        <option value="3">ultimi 3 giorni</option>
-        <option value="7">ultimi 7 giorni</option>
-      </select>
-    </label>
-    <label><input type="search" id="fText" placeholder="cerca via, descrizione…"></label>
-    <label title="annunci inseriti da privati (senza agenzia)"><input type="checkbox" id="fPrivate"> solo privati</label>
-    <label title="annunci che hanno registrato un ribasso di prezzo"><input type="checkbox" id="fDrops"> 📉 solo ribassati</label>
-    <label><input type="checkbox" id="fInactive"> mostra rimossi</label>
-    <label><input type="checkbox" id="fHidden"> mostra nascosti</label>
-    <label title="prezzi implausibili per l'intero alloggio: probabili stanze/posti letto per studenti"><input type="checkbox" id="fSuspect" checked> nascondi prezzi sospetti</label>
-    <label title="i preferiti di tutti: sotto ogni annuncio c'è chi l'ha segnato"><input type="checkbox" id="fLiked"> ❤ solo preferiti</label>
-    <button type="button" class="btn-reset" id="btnReset" title="Ripristina tutti i filtri">↺ Azzera</button>
-    <span class="count" id="resultCount"></span>
+  <div class="tiles" id="tiles" aria-label="Riepilogo del mercato">
+    <div class="tile loading"><div class="label">Annunci attivi</div><div class="value">—</div></div>
+    <div class="tile loading"><div class="label">Nuovi (7 giorni)</div><div class="value">—</div></div>
+    <div class="tile loading"><div class="label">Prezzo mediano</div><div class="value">—</div></div>
+    <div class="tile loading"><div class="label">€/m² mediano</div><div class="value">—</div></div>
   </div>
 
-  <section>
-    <h2>€/m² mediano per zona <span class="zone">(passa sopra le barre per i dettagli)</span></h2>
-    <div class="chart" id="zoneChart"></div>
+  <section class="filter-panel" aria-labelledby="filter-title">
+    <div class="filter-head">
+      <h2 id="filter-title">Affina la ricerca</h2>
+      <div class="filter-actions"><span class="active-filters" id="activeFilters"></span>
+        <button type="button" class="btn-reset" id="btnReset">Azzera filtri</button></div>
+    </div>
+    <div class="filters">
+      <label>Prezzo massimo (€)<input type="number" id="fMaxPrice" placeholder="es. 900" step="50" min="0"></label>
+      <label>Prezzo minimo (€)<input type="number" id="fMinPrice" placeholder="0" step="50" min="0"></label>
+      <label>Superficie minima (m²)<input type="number" id="fMinSurface" placeholder="es. 50" step="5" min="0"></label>
+      <label>Locali minimi
+        <select id="fRooms"><option value="">Qualsiasi</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+      </label>
+      <label>Zona <select id="fZone"><option value="">Tutte le zone</option></select></label>
+      <label>Data annuncio
+        <select id="fNew">
+          <option value="">Qualsiasi data</option>
+          <option value="1">Ultime 24 ore</option>
+          <option value="3">Ultimi 3 giorni</option>
+          <option value="7">Ultimi 7 giorni</option>
+        </select>
+      </label>
+      <label class="search-field">Cerca nell'annuncio<input type="search" id="fText" placeholder="Via, zona, descrizione o agenzia…"></label>
+    </div>
+    <div class="filter-toggles">
+      <label title="Annunci inseriti da privati"><input type="checkbox" id="fPrivate"> Solo privati</label>
+      <label title="Annunci con un ribasso registrato"><input type="checkbox" id="fDrops"> 📉 Ribassati</label>
+      <label><input type="checkbox" id="fLiked"> ♥ Preferiti</label>
+      <label title="Probabili stanze o posti letto"><input type="checkbox" id="fSuspect" checked> Escludi prezzi sospetti</label>
+      <label><input type="checkbox" id="fInactive"> Includi rimossi</label>
+      <label><input type="checkbox" id="fHidden"> Includi nascosti</label>
+    </div>
   </section>
 
-  <section>
+  <details class="insights">
+    <summary><span>Confronto prezzi per zona</span><span class="summary-note">Mediana €/m², minimo 3 annunci</span></summary>
+    <div class="chart" id="zoneChart"></div>
+  </details>
+
+  <main id="listings">
     <div class="section-head">
-      <h2>Annunci</h2>
-      <div class="view-tabs">
-        <button type="button" class="view-tab active" id="tabTable">📋 Tabella</button>
-        <button type="button" class="view-tab" id="tabCards">📇 Schede</button>
-        <button type="button" class="view-tab" id="tabMap">🗺️ Mappa</button>
+      <h2>Annunci <span class="result-meta" id="resultCount" aria-live="polite"></span></h2>
+      <div class="view-tabs" role="tablist" aria-label="Vista annunci">
+        <button type="button" class="view-tab active" id="tabTable" role="tab" aria-selected="true">Tabella</button>
+        <button type="button" class="view-tab" id="tabCards" role="tab" aria-selected="false">Schede</button>
+        <button type="button" class="view-tab" id="tabMap" role="tab" aria-selected="false">Mappa</button>
       </div>
     </div>
 
@@ -300,15 +366,27 @@
       <div id="mapView"></div>
     </div>
 
+    <div class="empty-state" id="emptyState" hidden>
+      <strong>Nessun annuncio corrisponde ai filtri</strong>
+      Prova ad ampliare prezzo, zona o data, oppure azzera i filtri.
+    </div>
+
     <button class="more" id="moreBtn" hidden>Mostra altri</button>
-  </section>
+  </main>
 </div>
 <div id="tooltip"></div>
+<div class="page-status" id="pageStatus" role="status" aria-live="polite"></div>
 
 <script>
 // Injected by the server: "/" locally, "/case/" when mounted under a prefix.
 const BASE = "__BASE__";
-const ME = "__USER__";
+const ME = document.getElementById("currentUser").textContent;
+const FILTER_IDS = ["fMaxPrice", "fMinPrice", "fMinSurface", "fRooms", "fZone",
+  "fNew", "fText", "fPrivate", "fDrops", "fInactive", "fHidden", "fSuspect", "fLiked"];
+const CHECK_FILTERS = new Set(["fPrivate", "fDrops", "fInactive", "fHidden", "fSuspect", "fLiked"]);
+const STORE_KEY = "rentwatch-dashboard";
+const EMPTY_FILTER_HTML = "<strong>Nessun annuncio corrisponde ai filtri</strong>" +
+  "Prova ad ampliare prezzo, zona o data, oppure azzera i filtri.";
 
 function heartedBy(l) {
   const hearts = l.liked_by || [];
@@ -316,17 +394,41 @@ function heartedBy(l) {
   return ` · <span class="heartedby">♥ ${esc(hearts.join(" + "))}</span>`;
 }
 const fmtEur = v => v == null ? "—" : "€ " + v.toLocaleString("it-IT");
+function storedPreferences() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}"); }
+  catch (_) { return {}; }
+}
+const preferences = storedPreferences();
 const state = {
   listings: [],
   filtered: [],
+  loading: true,
   sortKey: "first_seen",
   sortDir: -1,
   shown: 100,
-  view: "table" // "table" | "cards" | "map"
+  view: ["table", "cards", "map"].includes(preferences.view)
+    ? preferences.view
+    : (matchMedia("(max-width: 768px)").matches ? "cards" : "table")
 };
 
 let mapInstance = null;
 let mapMarkersGroup = null;
+let statusTimer = null;
+
+async function requestJSON(url, options) {
+  const res = await fetch(url, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Errore ${res.status}`);
+  return data;
+}
+
+function showStatus(message, kind = "") {
+  const el = document.getElementById("pageStatus");
+  el.textContent = message;
+  el.className = "page-status show " + kind;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { el.className = "page-status"; }, 3200);
+}
 
 const COLS = [
   { key: "photo",          label: "" },
@@ -344,23 +446,35 @@ async function load() {
   const liked = document.getElementById("fLiked").checked;
   const inactive = document.getElementById("fInactive").checked || liked;
   const hidden = document.getElementById("fHidden").checked || liked;
-  const [over, listings] = await Promise.all([
-    fetch(BASE + "api/overview").then(r => r.json()),
-    fetch(`${BASE}api/listings?include_inactive=${inactive}&include_hidden=${hidden}`).then(r => r.json()),
-  ]);
-  state.listings = listings;
-  renderTiles(over);
-  renderZones(over.zones);
-  fillZoneFilter(over.zones);
-  if (over.last_run) {
-    document.getElementById("lastRun").textContent =
-      `ultimo aggiornamento: ${new Date(over.last_run.finished_at).toLocaleString("it-IT")}` +
-      ` · ${over.last_run.new_listings} nuovi`;
+  document.getElementById("listings").setAttribute("aria-busy", "true");
+  try {
+    const [over, listings] = await Promise.all([
+      requestJSON(BASE + "api/overview"),
+      requestJSON(`${BASE}api/listings?include_inactive=${inactive}&include_hidden=${hidden}`),
+    ]);
+    state.listings = listings;
+    state.loading = false;
+    document.getElementById("emptyState").innerHTML = EMPTY_FILTER_HTML;
+    renderTiles(over);
+    renderZones(over.zones || []);
+    fillZoneFilter(over.zones || []);
+    if (over.last_run) {
+      document.getElementById("lastRun").textContent =
+        `aggiornato ${new Date(over.last_run.finished_at).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}` +
+        ` · ${over.last_run.new_listings} nuovi`;
+    }
+    if (over.is_scraping && !pollTimer) pollScrapeStatus();
+    applyFilters();
+  } catch (e) {
+    state.loading = false;
+    showStatus("Impossibile caricare gli annunci: " + e.message, "error");
+    document.getElementById("emptyState").hidden = false;
+    document.getElementById("emptyState").innerHTML =
+      "<strong>Impossibile caricare gli annunci</strong>Controlla la connessione e ricarica la pagina.";
+    renderCurrentView();
+  } finally {
+    document.getElementById("listings").removeAttribute("aria-busy");
   }
-  if (over.is_scraping && !pollTimer) {
-    pollScrapeStatus();
-  }
-  applyFilters();
 }
 
 function renderTiles(o) {
@@ -378,6 +492,10 @@ function renderTiles(o) {
 function renderZones(zones) {
   const el = document.getElementById("zoneChart");
   const data = zones.filter(z => z.median_ppm2 && z.count >= 3);
+  if (!data.length) {
+    el.innerHTML = '<div class="empty-state"><strong>Dati non ancora disponibili</strong>Servono almeno tre annunci per zona.</div>';
+    return;
+  }
   const max = Math.max(...data.map(z => z.median_ppm2));
   el.innerHTML = data.map(z => `
     <div class="rowz" data-zone="${esc(z.zone)}" data-count="${z.count}" data-price="${z.median_price}" data-ppm2="${z.median_ppm2}">
@@ -397,8 +515,8 @@ function renderZones(zones) {
 
 function fillZoneFilter(zones) {
   const sel = document.getElementById("fZone");
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">tutte</option>' +
+  const cur = sel.value || (preferences.filters || {}).fZone || "";
+  sel.innerHTML = '<option value="">Tutte le zone</option>' +
     zones.map(z => `<option>${esc(z.zone)}</option>`).join("");
   sel.value = cur;
 }
@@ -410,7 +528,7 @@ function applyFilters() {
   const rooms = document.getElementById("fRooms").value;
   const zone = document.getElementById("fZone").value;
   const newDays = +document.getElementById("fNew").value || 0;
-  const text = document.getElementById("fText").value.toLowerCase();
+  const text = document.getElementById("fText").value.trim().toLowerCase();
   const hideSus = document.getElementById("fSuspect").checked;
   const onlyLiked = document.getElementById("fLiked").checked;
   const onlyPrivate = document.getElementById("fPrivate").checked;
@@ -426,12 +544,42 @@ function applyFilters() {
     (!onlyDrops || l.price_delta < 0) &&
     (l.price == null || (l.price <= maxP && l.price >= minP)) &&
     (l.surface_m2 == null || l.surface_m2 >= minS) &&
-    (!rooms || (parseInt(l.rooms) || 0) >= +rooms || (l.rooms || "").includes("+")) &&
+    (!rooms || (parseInt(l.rooms) || 0) >= +rooms || String(l.rooms || "").includes("+")) &&
     (!zone || l.macrozone === zone) &&
     (!newDays || l.days_on_market < newDays) &&
-    (!text || ((l.title || "") + " " + (l.address || "") + " " + (l.microzone || "")).toLowerCase().includes(text))
+    (!text || ((l.title || "") + " " + (l.address || "") + " " + (l.microzone || "") +
+      " " + (l.macrozone || "") + " " + (l.description || "") + " " + (l.agency || ""))
+      .toLowerCase().includes(text))
   );
+  updateFilterState();
   sortAndRender();
+}
+
+function updateFilterState() {
+  const defaults = { fSuspect: true };
+  const filters = {};
+  let count = 0;
+  FILTER_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    filters[id] = CHECK_FILTERS.has(id) ? el.checked : el.value;
+    if (CHECK_FILTERS.has(id)) {
+      if (el.checked !== !!defaults[id]) count += 1;
+    } else if (el.value) count += 1;
+  });
+  document.getElementById("activeFilters").textContent = count ? `${count} attivi` : "";
+  document.getElementById("btnReset").disabled = count === 0;
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...storedPreferences(), filters })); }
+  catch (_) {}
+}
+
+function restorePreferences() {
+  const filters = preferences.filters || {};
+  FILTER_IDS.forEach(id => {
+    if (!(id in filters) || id === "fZone") return;
+    const el = document.getElementById(id);
+    if (CHECK_FILTERS.has(id)) el.checked = !!filters[id];
+    else el.value = filters[id];
+  });
 }
 
 function sortAndRender() {
@@ -444,12 +592,19 @@ function sortAndRender() {
     return (va < vb ? -1 : va > vb ? 1 : 0) * sortDir;
   });
   state.shown = 100;
-  document.getElementById("resultCount").textContent = `${state.filtered.length} risultati`;
+  const total = state.filtered.length;
+  document.getElementById("resultCount").textContent = `· ${total} ${total === 1 ? "risultato" : "risultati"}`;
   renderCurrentView();
 }
 
 function renderCurrentView() {
   const moreBtn = document.getElementById("moreBtn");
+  const empty = document.getElementById("emptyState");
+  empty.hidden = state.loading || state.filtered.length !== 0;
+  document.getElementById("tableSection").hidden = !state.loading && state.filtered.length === 0;
+  document.getElementById("cardsSection").hidden = !state.loading && state.filtered.length === 0;
+  document.getElementById("mapSection").hidden = !state.loading && state.filtered.length === 0;
+  if (state.loading) moreBtn.hidden = true;
   if (state.view === "table") {
     document.getElementById("tableSection").style.display = "block";
     document.getElementById("cardsSection").style.display = "none";
@@ -457,14 +612,14 @@ function renderCurrentView() {
     renderHead();
     renderRows();
     moreBtn.hidden = state.filtered.length <= state.shown;
-    moreBtn.textContent = `Mostra altri (${state.filtered.length - state.shown} rimanenti)`;
+    moreBtn.textContent = `Mostra altri (${Math.max(0, state.filtered.length - state.shown)} rimanenti)`;
   } else if (state.view === "cards") {
     document.getElementById("tableSection").style.display = "none";
     document.getElementById("cardsSection").style.display = "grid";
     document.getElementById("mapSection").style.display = "none";
     renderCards();
     moreBtn.hidden = state.filtered.length <= state.shown;
-    moreBtn.textContent = `Mostra altri (${state.filtered.length - state.shown} rimanenti)`;
+    moreBtn.textContent = `Mostra altri (${Math.max(0, state.filtered.length - state.shown)} rimanenti)`;
   } else if (state.view === "map") {
     document.getElementById("tableSection").style.display = "none";
     document.getElementById("cardsSection").style.display = "none";
@@ -476,19 +631,26 @@ function renderCurrentView() {
 
 function setView(view) {
   state.view = view;
-  document.getElementById("tabTable").classList.toggle("active", view === "table");
-  document.getElementById("tabCards").classList.toggle("active", view === "cards");
-  document.getElementById("tabMap").classList.toggle("active", view === "map");
+  [["tabTable", "table"], ["tabCards", "cards"], ["tabMap", "map"]].forEach(([id, name]) => {
+    const selected = view === name;
+    document.getElementById(id).classList.toggle("active", selected);
+    document.getElementById(id).setAttribute("aria-selected", String(selected));
+  });
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ ...storedPreferences(), view })); }
+  catch (_) {}
   renderCurrentView();
 }
 
 function renderHead() {
   document.getElementById("headRow").innerHTML = COLS.map(c => {
     const arrow = c.key === state.sortKey ? `<span class="arrow">${state.sortDir < 0 ? "▼" : "▲"}</span>` : "";
-    return `<th class="${c.num ? "num" : ""}" data-key="${c.key}">${c.label} ${arrow}</th>`;
+    const sortable = !["hide", "photo"].includes(c.key);
+    const sortState = c.key === state.sortKey ? (state.sortDir < 0 ? "descending" : "ascending") : "none";
+    return `<th class="${c.num ? "num" : ""}" data-key="${c.key}" aria-sort="${sortable ? sortState : "none"}">
+      ${sortable ? `<button type="button" class="sort-button">${c.label || "Foto"} ${arrow}</button>` : ""}</th>`;
   }).join("");
-  document.querySelectorAll("th[data-key]").forEach(th => th.onclick = () => {
-    if (th.dataset.key === "hide") return;
+  document.querySelectorAll("th[data-key] .sort-button").forEach(button => button.onclick = () => {
+    const th = button.closest("th");
     const k = th.dataset.key === "photo" ? "price" : th.dataset.key;
     if (state.sortKey === k) state.sortDir *= -1; else { state.sortKey = k; state.sortDir = -1; }
     sortAndRender();
@@ -504,7 +666,7 @@ function renderRows() {
       ? ` <span class="drop" title="prezzo sceso di € ${-l.price_delta}">▼ ${fmtEur(-l.price_delta)}</span>`
       : l.price_delta > 0 ? ` <span class="rise" title="prezzo salito">▲</span>` : "";
     return `<tr class="${l.is_active ? "" : "inactive"}${l.hidden ? " hiddenrow" : ""}">
-      <td>${l.photo_url ? `<img loading="lazy" src="${esc(l.photo_url)}" alt="">` : ""}</td>
+      <td>${l.photo_url ? `<img loading="lazy" src="${esc(l.photo_url)}" alt="Foto di ${esc(l.title || "annuncio")}">` : ""}</td>
       <td><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || "annuncio " + l.id)}</a>
           ${isNew ? '<span class="badge-new">NUOVO</span>' : ""}
           ${isPriv ? '<span class="badge-priv" title="Da privato">PRIVATO</span>' : ""}
@@ -519,8 +681,10 @@ function renderRows() {
       <td class="actions">
         <button class="likebtn${l.liked ? " on" : ""}${!l.liked && (l.liked_by || []).length ? " other" : ""}"
                 data-id="${l.id}" data-liked="${l.liked ? 1 : 0}"
+                aria-label="${l.liked ? "Togli dai tuoi preferiti" : "Aggiungi ai tuoi preferiti"}"
                 title="${l.liked ? "togli dai tuoi preferiti" : "aggiungi ai tuoi preferiti"}">${l.liked ? "♥" : "♡"}</button>
         <button class="hidebtn" data-id="${l.id}" data-hidden="${l.hidden ? 1 : 0}"
+                aria-label="${l.hidden ? "Ripristina annuncio" : "Nascondi annuncio"}"
                 title="${l.hidden ? "rimetti tra i risultati" : "nascondi: non mi interessa"}">
           ${l.hidden ? "↩" : "✕"}</button></td>
     </tr>`;
@@ -538,7 +702,7 @@ function renderCards() {
       : l.price_delta > 0 ? ` <span class="rise" title="prezzo salito">▲</span>` : "";
     return `<div class="card ${l.is_active ? "" : "inactive"}${l.hidden ? " hiddenrow" : ""}">
       <div class="card-img-wrap">
-        ${l.photo_url ? `<img loading="lazy" class="card-img" src="${esc(l.photo_url)}" alt="">` : `<div class="card-img-empty">🏠</div>`}
+        ${l.photo_url ? `<img loading="lazy" class="card-img" src="${esc(l.photo_url)}" alt="Foto di ${esc(l.title || "annuncio")}">` : `<div class="card-img-empty" aria-hidden="true">🏠</div>`}
         <div class="card-badges">
           ${isNew ? '<span class="badge-new">NUOVO</span>' : ""}
           ${isPriv ? '<span class="badge-priv">PRIVATO</span>' : ""}
@@ -551,8 +715,10 @@ function renderCards() {
           <div class="actions">
             <button class="likebtn${l.liked ? " on" : ""}${!l.liked && (l.liked_by || []).length ? " other" : ""}"
                     data-id="${l.id}" data-liked="${l.liked ? 1 : 0}"
+                    aria-label="${l.liked ? "Togli dai tuoi preferiti" : "Aggiungi ai tuoi preferiti"}"
                     title="${l.liked ? "togli dai tuoi preferiti" : "aggiungi ai tuoi preferiti"}">${l.liked ? "♥" : "♡"}</button>
             <button class="hidebtn" data-id="${l.id}" data-hidden="${l.hidden ? 1 : 0}"
+                    aria-label="${l.hidden ? "Ripristina annuncio" : "Nascondi annuncio"}"
                     title="${l.hidden ? "rimetti tra i risultati" : "nascondi"}">${l.hidden ? "↩" : "✕"}</button>
           </div>
         </div>
@@ -576,12 +742,18 @@ function renderCards() {
 
 function bindActionButtons() {
   document.querySelectorAll(".hidebtn").forEach(b =>
-    b.onclick = () => toggleHidden(+b.dataset.id, b.dataset.hidden === "0"));
+    b.onclick = () => toggleHidden(+b.dataset.id, b.dataset.hidden === "0", b));
   document.querySelectorAll(".likebtn").forEach(b =>
-    b.onclick = () => toggleLiked(+b.dataset.id, b.dataset.liked === "0"));
+    b.onclick = () => toggleLiked(+b.dataset.id, b.dataset.liked === "0", b));
 }
 
 function renderMap() {
+  if (typeof L === "undefined") {
+    document.getElementById("mapView").innerHTML =
+      '<div class="empty-state"><strong>Mappa non disponibile</strong>La libreria cartografica non è raggiungibile.</div>';
+    showStatus("Mappa non disponibile: controlla la connessione", "error");
+    return;
+  }
   if (!mapInstance) {
     mapInstance = L.map("mapView").setView([45.0703, 7.6869], 13);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -622,7 +794,7 @@ function renderMap() {
 
     const popupHtml = `
       <div style="min-width:210px;max-width:260px;">
-        ${l.photo_url ? `<img class="map-thumb" src="${esc(l.photo_url)}" alt="">` : ""}
+        ${l.photo_url ? `<img class="map-thumb" src="${esc(l.photo_url)}" alt="Foto di ${esc(l.title || "annuncio")}">` : ""}
         <div class="map-price">${fmtEur(l.price)}${delta}</div>
         <div class="map-title"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || "annuncio " + l.id)}</a></div>
         <div class="map-details">
@@ -645,27 +817,38 @@ function renderMap() {
   }
 }
 
-async function toggleHidden(id, hide) {
-  const res = await fetch(`${BASE}api/listings/${id}/hidden?value=${hide}`, { method: "POST" });
-  if (!res.ok) return;
-  const l = state.listings.find(x => x.id === id);
-  if (l) l.hidden = hide ? 1 : 0;
-  if (hide && !document.getElementById("fHidden").checked && !document.getElementById("fLiked").checked) {
-    state.listings = state.listings.filter(x => x.id !== id);
+async function toggleHidden(id, hide, button) {
+  if (button) button.disabled = true;
+  try {
+    await requestJSON(`${BASE}api/listings/${id}/hidden?value=${hide}`, { method: "POST" });
+    const l = state.listings.find(x => x.id === id);
+    if (l) l.hidden = hide ? 1 : 0;
+    if (hide && !document.getElementById("fHidden").checked && !document.getElementById("fLiked").checked) {
+      state.listings = state.listings.filter(x => x.id !== id);
+    }
+    applyFilters();
+    showStatus(hide ? "Annuncio nascosto" : "Annuncio ripristinato");
+  } catch (e) {
+    if (button) button.disabled = false;
+    showStatus("Operazione non riuscita: " + e.message, "error");
   }
-  applyFilters();
 }
 
-async function toggleLiked(id, like) {
-  const res = await fetch(`${BASE}api/listings/${id}/liked?value=${like}`, { method: "POST" });
-  if (!res.ok) return;
-  const data = await res.json();
-  const l = state.listings.find(x => x.id === id);
-  if (l) {
-    l.liked = like ? 1 : 0;
-    l.liked_by = data.liked_by || [];
+async function toggleLiked(id, like, button) {
+  if (button) button.disabled = true;
+  try {
+    const data = await requestJSON(`${BASE}api/listings/${id}/liked?value=${like}`, { method: "POST" });
+    const l = state.listings.find(x => x.id === id);
+    if (l) {
+      l.liked = like ? 1 : 0;
+      l.liked_by = data.liked_by || [];
+    }
+    applyFilters();
+    showStatus(like ? "Aggiunto ai tuoi preferiti" : "Rimosso dai tuoi preferiti");
+  } catch (e) {
+    if (button) button.disabled = false;
+    showStatus("Operazione non riuscita: " + e.message, "error");
   }
-  applyFilters();
 }
 
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c =>
@@ -690,7 +873,7 @@ function pollScrapeStatus() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
     try {
-      const over = await fetch(BASE + "api/overview").then(r => r.json());
+      const over = await requestJSON(BASE + "api/overview");
       if (!over.is_scraping) {
         clearInterval(pollTimer);
         pollTimer = null;
@@ -714,19 +897,20 @@ async function triggerScrape() {
     const res = await fetch(BASE + "api/scrape-now", { method: "POST" });
     const data = await res.json();
     if (!res.ok && res.status !== 409) {
-      alert(data.error || "Errore durante l'avvio dello scrape");
+      showStatus(data.error || "Errore durante l'avvio dello scrape", "error");
       btn.disabled = false;
       btn.classList.remove("spinning");
       txt.textContent = "Aggiorna adesso";
       return;
     }
   } catch (e) {
-    alert("Errore di connessione col server");
+    showStatus("Errore di connessione col server", "error");
     btn.disabled = false;
     btn.classList.remove("spinning");
     txt.textContent = "Aggiorna adesso";
     return;
   }
+  showStatus("Aggiornamento avviato");
   pollScrapeStatus();
 }
 
@@ -744,6 +928,7 @@ function resetFilters() {
   document.getElementById("fHidden").checked = false;
   document.getElementById("fLiked").checked = false;
   document.getElementById("fSuspect").checked = true;
+  updateFilterState();
   load();
 }
 
@@ -753,8 +938,12 @@ document.getElementById("tabTable").onclick = () => setView("table");
 document.getElementById("tabCards").onclick = () => setView("cards");
 document.getElementById("tabMap").onclick = () => setView("map");
 
-["fMaxPrice", "fMinPrice", "fMinSurface", "fRooms", "fZone", "fNew", "fText"].forEach(id =>
+["fMaxPrice", "fMinPrice", "fMinSurface", "fText"].forEach(id =>
   document.getElementById(id).addEventListener("input", applyFilters));
+["fRooms", "fZone", "fNew"].forEach(id => {
+  document.getElementById(id).addEventListener("input", applyFilters);
+  document.getElementById(id).addEventListener("change", applyFilters);
+});
 ["fPrivate", "fDrops", "fSuspect"].forEach(id =>
   document.getElementById(id).addEventListener("change", applyFilters));
 ["fInactive", "fHidden", "fLiked"].forEach(id =>
@@ -762,10 +951,11 @@ document.getElementById("tabMap").onclick = () => setView("map");
 
 document.getElementById("moreBtn").onclick = () => {
   state.shown += 100;
-  if (state.view === "table") renderRows();
-  else if (state.view === "cards") renderCards();
+  renderCurrentView();
 };
 
+restorePreferences();
+setView(state.view);
 load();
 </script>
 </body>

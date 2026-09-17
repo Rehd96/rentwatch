@@ -6,6 +6,7 @@ forgetting to log in is a nuisance, forgetting to guard an endpoint publishes
 where you are about to live.
 """
 
+import html
 import logging
 import sqlite3
 import statistics
@@ -45,10 +46,10 @@ def _days_since(iso: str) -> int:
 def _page(name: str, base: str, user: str = "") -> HTMLResponse:
     """Serve a static page with its base URL baked in, so the same files work
     at the domain root locally and under /case/ on the VPS."""
-    html = ((STATIC_DIR / name).read_text(encoding="utf-8")
+    page = ((STATIC_DIR / name).read_text(encoding="utf-8")
             .replace("__BASE__", base)
-            .replace("__USER__", user))
-    return HTMLResponse(html)
+            .replace("__USER__", html.escape(user)))
+    return HTMLResponse(page)
 
 
 def _client_ip(request: Request) -> str:
@@ -121,10 +122,10 @@ def create_app(cfg: dict) -> FastAPI:
     # ── login / logout ───────────────────────────────────────────────────────
 
     def login_html(request: Request, error: str = "", status: int = 200) -> HTMLResponse:
-        html = ((STATIC_DIR / "login.html").read_text(encoding="utf-8")
+        page = ((STATIC_DIR / "login.html").read_text(encoding="utf-8")
                 .replace("__BASE__", base_of(request))
-                .replace("__ERROR__", error))
-        return HTMLResponse(html, status_code=status)
+                .replace("__ERROR__", html.escape(error)))
+        return HTMLResponse(page, status_code=status)
 
     @app.get("/login")
     def login_page(request: Request):
