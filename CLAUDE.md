@@ -24,8 +24,11 @@ Non c'è una test suite: verificare con `scrape --max-pages 2` + login su
 
 ## Architettura
 
-- `rentwatch/scraper.py` — client dell'API interna `api-next/search-list/listings/`
-  via **curl_cffi** `impersonate="chrome"` (HTTP semplice → 403 sul TLS fingerprint).
+- `rentwatch/scraper.py` — scraping delle pagine SSR di immobiliare.it con estrazione
+  dei dati da `__NEXT_DATA__` (lo stato React Query idratato dal server) via **curl_cffi**
+  con rotazione impersonazione browser (`chrome`, `safari`, `safari17_0`).
+  Le chiamate dirette all'endpoint interno `/api-next/search-list/listings/` vengono bloccate
+  con HTTP 403 da DataDome a causa dei controlli JS-challenge sul fingerprint.
 - `rentwatch/db.py` — SQLite `data/rentwatch.db`: `listings` (first/last_seen,
   is_active, `hidden` = scartato a mano), `price_history`, `scrape_runs`,
   `favourites`, `notify_queue`. Migrazioni additive in `_migrate()`.
