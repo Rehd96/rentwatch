@@ -31,18 +31,16 @@ togliere.
 - [x] Notifiche Telegram configurabili (filtri, template, ore di silenzio)
 - [x] Bot con comandi: /stato /ultimi /preferiti /filtri /prezzo /superficie
       /silenzia /riattiva
-- [ ] Verificare la resa della dashboard su schermo piccolo: la tabella annunci
-      è nata per il desktop
+- [x] Verificare la resa della dashboard su schermo piccolo: aggiunta vista a schede (cards) responsive per mobile
+- [x] Vista mappa nella dashboard (lat/lon nel DB — Leaflet + OpenStreetMap con pin prezzo interattivi)
+- [x] Filtro "solo privati" (senza agenzia) e "solo ribassati" in dashboard, con tasto azzera filtri
+- [x] Pulsante "Aggiorna adesso" con polling di stato live nell'header della home
+- [x] Comandi Telegram estesi: /cerca, /ribassi, /zone, /aggiorna e inline keyboard ♥ / ✕
 
 ## Funzionalità future
 
-- [ ] Vista mappa nella dashboard (lat/lon già nel DB — Leaflet + OpenStreetMap)
 - [ ] Secondo portale (Idealista/Subito) o integrazione flathunter per il confronto
-- [ ] Grafico andamento nel tempo (canone mediano per settimana) quando ci saranno
-      abbastanza run nello storico
-- [ ] Filtro "escludi agenzie" / solo privati anche in dashboard (per ora è solo
-      un filtro di notifica)
-- [ ] Pulsante "scrape adesso" anche in home, non solo nelle impostazioni
+- [ ] Grafico andamento nel tempo (canone mediano per settimana) quando ci saranno abbastanza run nello storico
 
 ## Fatto
 

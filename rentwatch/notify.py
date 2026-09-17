@@ -76,6 +76,20 @@ def chat_ids(cfg: dict) -> list[str]:
     return [str(r["chat_id"]) for r in recipients(cfg)]
 
 
+def edit_message_text(token: str, chat_id: str, message_id: int, text: str,
+                      reply_markup: dict | None = None) -> bool:
+    """Edit existing message text and optionally update/remove its reply markup."""
+    payload = {
+        "chat_id": str(chat_id),
+        "message_id": message_id,
+        "text": text,
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    ok, _ = request(token, "editMessageText", payload)
+    return ok
+
+
 def send_message(cfg: dict, text: str, chat_id: str | None = None,
                  preview: bool = True, reply_markup: dict | None = None) -> bool:
     """Send to one chat, or to every recipient when chat_id is not given.
@@ -97,11 +111,15 @@ def send_message(cfg: dict, text: str, chat_id: str | None = None,
         payload = {
             "chat_id": target,
             "text": text,
-            "disable_web_page_preview": not preview,
+            "link_preview_options": {"is_disabled": not preview},
         }
         if reply_markup:
             payload["reply_markup"] = reply_markup
         ok, error = request(cfg["bot_token"], "sendMessage", payload)
+        if not ok and "link_preview_options" in str(error):
+            payload.pop("link_preview_options", None)
+            payload["disable_web_page_preview"] = not preview
+            ok, error = request(cfg["bot_token"], "sendMessage", payload)
         if ok:
             delivered += 1
         else:

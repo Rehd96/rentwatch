@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS listings (
 );
 CREATE INDEX IF NOT EXISTS idx_listings_active ON listings(is_active, price);
 CREATE INDEX IF NOT EXISTS idx_listings_zone ON listings(macrozone);
+CREATE INDEX IF NOT EXISTS idx_listings_active_hidden ON listings(is_active, hidden, first_seen DESC);
 
 CREATE TABLE IF NOT EXISTS price_history (
     listing_id INTEGER NOT NULL REFERENCES listings(id),
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS price_history (
     price INTEGER,
     PRIMARY KEY (listing_id, observed_at)
 );
+CREATE INDEX IF NOT EXISTS idx_price_history_time ON price_history(listing_id, observed_at);
 
 CREATE TABLE IF NOT EXISTS scrape_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,6 +103,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for col in ("hidden", "liked"):
         if col not in cols:
             conn.execute(f"ALTER TABLE listings ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_listings_active_hidden ON listings(is_active, hidden, first_seen DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_price_history_time ON price_history(listing_id, observed_at)")
     conn.commit()
 
 
@@ -322,3 +326,62 @@ def finish_run(conn: sqlite3.Connection, run_id: int, *, seen: int, new: int,
         " price_changes = ?, status = ? WHERE id = ?",
         (now_iso(), seen, new, price_changes, status, run_id),
     )
+
+
+def recent_price_drops(conn: sqlite3.Connection, limit: int = 5) -> list[dict]:
+    """Active listings where the latest price is lower than the initial recorded price."""
+    rows = conn.execute("""
+        SELECT l.*,
+               (SELECT ph.price FROM price_history ph WHERE ph.listing_id = l.id
+                ORDER BY ph.observed_at ASC LIMIT 1) AS initial_price
+        FROM listings l
+        WHERE l.is_active = 1 AND l.hidden = 0 AND l.price IS NOT NULL
+          AND (SELECT COUNT(*) FROM price_history ph WHERE ph.listing_id = l.id) > 1
+          AND l.price < (SELECT ph.price FROM price_history ph WHERE ph.listing_id = l.id
+                         ORDER BY ph.observed_at ASC LIMIT 1)
+        ORDER BY l.last_seen DESC, (initial_price - l.price) DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def search_active_listings(conn: sqlite3.Connection, query: str, limit: int = 5) -> list[dict]:
+    """Search active listings by max price (e.g. '800') or text in title/address/zone."""
+    query = query.strip()
+    if not query:
+        return []
+    clean_num = query.rstrip("€").strip()
+    if clean_num.isdigit() and int(clean_num) >= 100:
+        max_price = int(clean_num)
+        rows = conn.execute("""
+            SELECT * FROM listings
+            WHERE is_active = 1 AND hidden = 0 AND price IS NOT NULL AND price <= ?
+            ORDER BY first_seen DESC LIMIT ?
+        """, (max_price, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    pat = f"%{query}%"
+    rows = conn.execute("""
+        SELECT * FROM listings
+        WHERE is_active = 1 AND hidden = 0
+          AND (title LIKE ? OR address LIKE ? OR microzone LIKE ? OR macrozone LIKE ? OR description LIKE ?)
+        ORDER BY first_seen DESC LIMIT ?
+    """, (pat, pat, pat, pat, pat, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def zone_summary(conn: sqlite3.Connection, limit: int = 8) -> list[dict]:
+    """Top macrozones with active listings count, avg price and avg ppm2."""
+    rows = conn.execute("""
+        SELECT macrozone,
+               COUNT(*) as count,
+               ROUND(AVG(price)) as avg_price,
+               ROUND(AVG(price / surface_m2), 1) as avg_ppm2
+        FROM listings
+        WHERE is_active = 1 AND hidden = 0 AND macrozone IS NOT NULL AND price IS NOT NULL AND surface_m2 > 10
+        GROUP BY macrozone
+        HAVING count >= 3
+        ORDER BY count DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    return [dict(r) for r in rows]

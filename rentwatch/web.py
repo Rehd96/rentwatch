@@ -274,6 +274,8 @@ def create_app(cfg: dict) -> FastAPI:
                 "SELECT started_at, finished_at, listings_seen, new_listings, status "
                 "FROM scrape_runs ORDER BY id DESC LIMIT 1"
             ).fetchone()
+            lock = Path(db_path).parent / "scrape.lock"
+            is_scraping = lock.exists() and (time.time() - lock.stat().st_mtime < 3600)
             return {
                 "active_count": len(active),
                 "new_7d": new_7d,
@@ -284,6 +286,7 @@ def create_app(cfg: dict) -> FastAPI:
                 "every_hours": cfg.get("schedule", {}).get("every_hours", 4),
                 "queued_notifications": db.queue_size(conn)
                 if _has_table(conn, "notify_queue") else 0,
+                "is_scraping": is_scraping,
             }
         finally:
             conn.close()

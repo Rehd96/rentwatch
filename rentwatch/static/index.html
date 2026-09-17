@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>rentwatch · Affitti Torino</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
   :root {
     --page:           #f9f9f7;
@@ -45,12 +47,25 @@
     font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
-  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .header-main { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   header h1 { font-size: 20px; margin: 0; }
   header .sub { color: var(--muted); font-size: 13px; }
-  header .navlinks { margin-left: auto; display: flex; gap: 14px; }
+  .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header .navlinks { display: flex; gap: 14px; }
   header .navlinks a { color: var(--accent); text-decoration: none; font-size: 13px; }
   header .navlinks a:hover { text-decoration: underline; }
+
+  .btn-scrape {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 500;
+    padding: 6px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .btn-scrape:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-scrape:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-scrape.spinning .spin-icon { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
 
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
   .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
@@ -61,16 +76,36 @@
   .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
              background: var(--surface); border: 1px solid var(--border);
              border-radius: 10px; padding: 10px 12px; margin-bottom: 18px; }
-  .filters label { color: var(--ink-2); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+  .filters label { color: var(--ink-2); font-size: 12px; display: flex; align-items: center; gap: 5px; cursor: pointer; }
   .filters input[type=number], .filters input[type=search], .filters select {
     background: var(--page); color: var(--ink); border: 1px solid var(--border);
-    border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13px; width: 90px;
+    border-radius: 6px; padding: 5px 7px; font: inherit; font-size: 13px; width: 85px;
   }
-  .filters input[type=search] { width: 160px; }
+  .filters input[type=search] { width: 170px; }
   .filters select { width: auto; max-width: 210px; }
-  .filters .count { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .filters .count { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 500; }
+  .btn-reset {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--muted); font: inherit; font-size: 12px; padding: 4px 8px; cursor: pointer;
+  }
+  .btn-reset:hover { color: var(--ink); border-color: var(--ink-2); }
 
-  section h2 { font-size: 15px; margin: 22px 0 10px; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin: 24px 0 10px; flex-wrap: wrap; gap: 10px; }
+  .section-head h2 { font-size: 15px; margin: 0; }
+
+  .view-tabs {
+    display: inline-flex; background: var(--page); border: 1px solid var(--border);
+    border-radius: 8px; padding: 2px; gap: 2px;
+  }
+  .view-tab {
+    background: transparent; border: none; border-radius: 6px; color: var(--ink-2);
+    font: inherit; font-size: 12px; font-weight: 500; padding: 5px 11px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .view-tab:hover { color: var(--ink); }
+  .view-tab.active {
+    background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-weight: 600;
+  }
 
   /* zone chart */
   .chart { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
@@ -103,6 +138,9 @@
   .zone { color: var(--muted); font-size: 12px; }
   .badge-new { display: inline-block; background: var(--accent-soft); color: var(--ink);
                font-size: 11px; font-weight: 600; border-radius: 5px; padding: 1px 6px; margin-left: 6px; }
+  .badge-priv { display: inline-block; background: color-mix(in srgb, var(--good) 15%, transparent);
+                color: var(--good); font-size: 10.5px; font-weight: 600; border-radius: 5px;
+                padding: 1px 5px; margin-left: 5px; }
   .drop { color: var(--good); font-weight: 600; }
   .rise { color: var(--bad); font-weight: 600; }
   .inactive td { opacity: 0.45; }
@@ -116,30 +154,93 @@
   .hidebtn:hover { color: var(--bad); border-color: var(--bad); }
   .likebtn:hover { color: var(--accent); border-color: var(--accent); }
   .likebtn.on { color: var(--bad); border-color: var(--bad); }
-  /* hearted by the other person, not by me: visible but clearly not mine */
   .likebtn.other { border-color: var(--bad); opacity: .75; }
   .heartedby { color: var(--bad); }
   td.actions { white-space: nowrap; }
+
+  /* cards view */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .card:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+  .card.inactive { opacity: 0.5; }
+  .card.hiddenrow { opacity: 0.4; }
+  .card-img-wrap { position: relative; width: 100%; height: 160px; background: var(--grid); overflow: hidden; }
+  .card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card-img-empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 28px; }
+  .card-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .card-price-row { display: flex; align-items: baseline; justify-content: space-between; }
+  .card-price { font-size: 18px; font-weight: 700; color: var(--ink); }
+  .card-title { font-size: 13.5px; font-weight: 600; line-height: 1.35; margin: 0; }
+  .card-title a { color: var(--ink); text-decoration: none; }
+  .card-title a:hover { color: var(--accent); text-decoration: underline; }
+  .card-zone { color: var(--muted); font-size: 12px; }
+  .card-specs { display: flex; gap: 10px; font-size: 12.5px; color: var(--ink-2); margin-top: auto; padding-top: 6px; }
+  .card-footer {
+    padding: 8px 14px; border-top: 1px solid var(--grid); display: flex;
+    align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted);
+  }
+
+  /* map view */
+  #mapView {
+    height: 580px; border-radius: 10px; border: 1px solid var(--border);
+    overflow: hidden; margin-bottom: 20px; z-index: 1;
+  }
+  .leaflet-popup-content-wrapper {
+    border-radius: 10px; background: var(--surface); color: var(--ink);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.2);
+  }
+  .leaflet-popup-content { margin: 12px; font-family: inherit; font-size: 13px; line-height: 1.4; }
+  .map-thumb { width: 100%; height: 110px; object-fit: cover; border-radius: 6px; margin-bottom: 6px; display: block; }
+  .map-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .map-title a { color: var(--accent); text-decoration: none; }
+  .map-price { font-weight: 700; font-size: 15px; color: var(--ink); margin-bottom: 4px; }
+  .map-details { font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
+  .map-actions { display: flex; gap: 6px; }
+
   .more { margin: 14px auto; display: block; background: var(--surface); color: var(--ink);
           border: 1px solid var(--border); border-radius: 8px; padding: 8px 18px; font: inherit; cursor: pointer; }
   .more:hover { border-color: var(--accent); }
 
   #tooltip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink);
              border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 12.5px;
-             box-shadow: 0 4px 14px rgba(0,0,0,0.18); display: none; z-index: 10; max-width: 260px; }
+             box-shadow: 0 4px 14px rgba(0,0,0,0.18); display: none; z-index: 1000; max-width: 260px; }
   #tooltip .t { font-weight: 600; }
   #tooltip .s { color: var(--ink-2); }
+
+  @media (max-width: 768px) {
+    .wrap { padding: 12px 10px 40px; }
+    header { flex-direction: column; align-items: stretch; gap: 10px; }
+    .header-actions { justify-content: space-between; }
+    .filters { gap: 6px; }
+    .filters input[type=number] { width: 75px; }
+    .filters input[type=search] { width: 100%; }
+    .chart .rowz { grid-template-columns: 120px 1fr 75px; gap: 6px; }
+    .chart .zname { font-size: 11.5px; }
+    .chart .zval { font-size: 11.5px; }
+    #mapView { height: 450px; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>🏠 rentwatch — affitti a Torino</h1>
-    <span class="sub" id="lastRun"></span>
-    <span class="navlinks">
-      <a href="__BASE__settings">impostazioni</a>
-      <a href="__BASE__logout">esci (__USER__)</a>
-    </span>
+    <div class="header-main">
+      <h1>🏠 rentwatch — affitti a Torino</h1>
+      <span class="sub" id="lastRun"></span>
+    </div>
+    <div class="header-actions">
+      <button id="btnScrape" class="btn-scrape" title="Avvia subito uno scraping dei nuovi annunci">
+        <span class="spin-icon">🔄</span> <span id="scrapeBtnText">Aggiorna adesso</span>
+      </button>
+      <span class="navlinks">
+        <a href="__BASE__settings">impostazioni</a>
+        <a href="__BASE__logout">esci (__USER__)</a>
+      </span>
+    </div>
   </header>
 
   <div class="tiles" id="tiles"></div>
@@ -161,10 +262,13 @@
       </select>
     </label>
     <label><input type="search" id="fText" placeholder="cerca via, descrizione…"></label>
+    <label title="annunci inseriti da privati (senza agenzia)"><input type="checkbox" id="fPrivate"> solo privati</label>
+    <label title="annunci che hanno registrato un ribasso di prezzo"><input type="checkbox" id="fDrops"> 📉 solo ribassati</label>
     <label><input type="checkbox" id="fInactive"> mostra rimossi</label>
     <label><input type="checkbox" id="fHidden"> mostra nascosti</label>
     <label title="prezzi implausibili per l'intero alloggio: probabili stanze/posti letto per studenti"><input type="checkbox" id="fSuspect" checked> nascondi prezzi sospetti</label>
     <label title="i preferiti di tutti: sotto ogni annuncio c'è chi l'ha segnato"><input type="checkbox" id="fLiked"> ❤ solo preferiti</label>
+    <button type="button" class="btn-reset" id="btnReset" title="Ripristina tutti i filtri">↺ Azzera</button>
     <span class="count" id="resultCount"></span>
   </div>
 
@@ -174,13 +278,28 @@
   </section>
 
   <section>
-    <h2>Annunci</h2>
-    <div class="tablewrap">
+    <div class="section-head">
+      <h2>Annunci</h2>
+      <div class="view-tabs">
+        <button type="button" class="view-tab active" id="tabTable">📋 Tabella</button>
+        <button type="button" class="view-tab" id="tabCards">📇 Schede</button>
+        <button type="button" class="view-tab" id="tabMap">🗺️ Mappa</button>
+      </div>
+    </div>
+
+    <div class="tablewrap" id="tableSection">
       <table>
         <thead><tr id="headRow"></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
+
+    <div class="cards-grid" id="cardsSection" style="display:none;"></div>
+
+    <div id="mapSection" style="display:none;">
+      <div id="mapView"></div>
+    </div>
+
     <button class="more" id="moreBtn" hidden>Mostra altri</button>
   </section>
 </div>
@@ -191,15 +310,23 @@
 const BASE = "__BASE__";
 const ME = "__USER__";
 
-// Who hearted this, shown next to the zone. Only worth saying when it is not
-// just me — with one account it would be noise on every row.
 function heartedBy(l) {
   const hearts = l.liked_by || [];
   if (!hearts.length || (hearts.length === 1 && hearts[0] === ME)) return "";
   return ` · <span class="heartedby">♥ ${esc(hearts.join(" + "))}</span>`;
 }
 const fmtEur = v => v == null ? "—" : "€ " + v.toLocaleString("it-IT");
-const state = { listings: [], filtered: [], sortKey: "first_seen", sortDir: -1, shown: 100 };
+const state = {
+  listings: [],
+  filtered: [],
+  sortKey: "first_seen",
+  sortDir: -1,
+  shown: 100,
+  view: "table" // "table" | "cards" | "map"
+};
+
+let mapInstance = null;
+let mapMarkersGroup = null;
 
 const COLS = [
   { key: "photo",          label: "" },
@@ -214,7 +341,6 @@ const COLS = [
 ];
 
 async function load() {
-  // "solo preferiti" must also show liked listings that were removed or hidden
   const liked = document.getElementById("fLiked").checked;
   const inactive = document.getElementById("fInactive").checked || liked;
   const hidden = document.getElementById("fHidden").checked || liked;
@@ -230,6 +356,9 @@ async function load() {
     document.getElementById("lastRun").textContent =
       `ultimo aggiornamento: ${new Date(over.last_run.finished_at).toLocaleString("it-IT")}` +
       ` · ${over.last_run.new_listings} nuovi`;
+  }
+  if (over.is_scraping && !pollTimer) {
+    pollScrapeStatus();
   }
   applyFilters();
 }
@@ -284,14 +413,17 @@ function applyFilters() {
   const text = document.getElementById("fText").value.toLowerCase();
   const hideSus = document.getElementById("fSuspect").checked;
   const onlyLiked = document.getElementById("fLiked").checked;
+  const onlyPrivate = document.getElementById("fPrivate").checked;
+  const onlyDrops = document.getElementById("fDrops").checked;
 
-  // A heart from either person counts: the shortlist is shared, and a flat
-  // one of us liked should not vanish from the other's filter.
   const anyHeart = l => l.liked || (l.liked_by || []).length > 0;
+  const isPriv = l => !l.agency || l.agency.toLowerCase().includes("privato");
 
   state.filtered = state.listings.filter(l =>
     (!onlyLiked || anyHeart(l)) &&
     (!hideSus || !l.suspect || anyHeart(l)) &&
+    (!onlyPrivate || isPriv(l)) &&
+    (!onlyDrops || l.price_delta < 0) &&
     (l.price == null || (l.price <= maxP && l.price >= minP)) &&
     (l.surface_m2 == null || l.surface_m2 >= minS) &&
     (!rooms || (parseInt(l.rooms) || 0) >= +rooms || (l.rooms || "").includes("+")) &&
@@ -312,8 +444,42 @@ function sortAndRender() {
     return (va < vb ? -1 : va > vb ? 1 : 0) * sortDir;
   });
   state.shown = 100;
-  renderHead();
-  renderRows();
+  document.getElementById("resultCount").textContent = `${state.filtered.length} risultati`;
+  renderCurrentView();
+}
+
+function renderCurrentView() {
+  const moreBtn = document.getElementById("moreBtn");
+  if (state.view === "table") {
+    document.getElementById("tableSection").style.display = "block";
+    document.getElementById("cardsSection").style.display = "none";
+    document.getElementById("mapSection").style.display = "none";
+    renderHead();
+    renderRows();
+    moreBtn.hidden = state.filtered.length <= state.shown;
+    moreBtn.textContent = `Mostra altri (${state.filtered.length - state.shown} rimanenti)`;
+  } else if (state.view === "cards") {
+    document.getElementById("tableSection").style.display = "none";
+    document.getElementById("cardsSection").style.display = "grid";
+    document.getElementById("mapSection").style.display = "none";
+    renderCards();
+    moreBtn.hidden = state.filtered.length <= state.shown;
+    moreBtn.textContent = `Mostra altri (${state.filtered.length - state.shown} rimanenti)`;
+  } else if (state.view === "map") {
+    document.getElementById("tableSection").style.display = "none";
+    document.getElementById("cardsSection").style.display = "none";
+    document.getElementById("mapSection").style.display = "block";
+    moreBtn.hidden = true;
+    renderMap();
+  }
+}
+
+function setView(view) {
+  state.view = view;
+  document.getElementById("tabTable").classList.toggle("active", view === "table");
+  document.getElementById("tabCards").classList.toggle("active", view === "cards");
+  document.getElementById("tabMap").classList.toggle("active", view === "map");
+  renderCurrentView();
 }
 
 function renderHead() {
@@ -331,10 +497,9 @@ function renderHead() {
 
 function renderRows() {
   const rows = state.filtered.slice(0, state.shown);
-  document.getElementById("resultCount").textContent =
-    `${state.filtered.length} risultati`;
   document.getElementById("rows").innerHTML = rows.map(l => {
     const isNew = l.days_on_market <= 2 && l.is_active;
+    const isPriv = !l.agency || l.agency.toLowerCase().includes("privato");
     const delta = l.price_delta < 0
       ? ` <span class="drop" title="prezzo sceso di € ${-l.price_delta}">▼ ${fmtEur(-l.price_delta)}</span>`
       : l.price_delta > 0 ? ` <span class="rise" title="prezzo salito">▲</span>` : "";
@@ -342,6 +507,7 @@ function renderRows() {
       <td>${l.photo_url ? `<img loading="lazy" src="${esc(l.photo_url)}" alt="">` : ""}</td>
       <td><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || "annuncio " + l.id)}</a>
           ${isNew ? '<span class="badge-new">NUOVO</span>' : ""}
+          ${isPriv ? '<span class="badge-priv" title="Da privato">PRIVATO</span>' : ""}
           ${l.suspect ? '<span class="badge-sus" title="prezzo implausibile per l\'intero alloggio: probabile stanza/posto letto">€/stanza?</span>' : ""}
           <div class="zone">${esc([l.macrozone, l.microzone].filter(Boolean).join(" · "))}${l.is_active ? "" : " · rimosso"}${l.hidden ? " · nascosto" : ""}${heartedBy(l)}</div></td>
       <td class="num">${fmtEur(l.price)}${delta}</td>
@@ -359,13 +525,124 @@ function renderRows() {
           ${l.hidden ? "↩" : "✕"}</button></td>
     </tr>`;
   }).join("");
+  bindActionButtons();
+}
+
+function renderCards() {
+  const cards = state.filtered.slice(0, state.shown);
+  document.getElementById("cardsSection").innerHTML = cards.map(l => {
+    const isNew = l.days_on_market <= 2 && l.is_active;
+    const isPriv = !l.agency || l.agency.toLowerCase().includes("privato");
+    const delta = l.price_delta < 0
+      ? ` <span class="drop" title="prezzo sceso di € ${-l.price_delta}">▼ ${fmtEur(-l.price_delta)}</span>`
+      : l.price_delta > 0 ? ` <span class="rise" title="prezzo salito">▲</span>` : "";
+    return `<div class="card ${l.is_active ? "" : "inactive"}${l.hidden ? " hiddenrow" : ""}">
+      <div class="card-img-wrap">
+        ${l.photo_url ? `<img loading="lazy" class="card-img" src="${esc(l.photo_url)}" alt="">` : `<div class="card-img-empty">🏠</div>`}
+        <div class="card-badges">
+          ${isNew ? '<span class="badge-new">NUOVO</span>' : ""}
+          ${isPriv ? '<span class="badge-priv">PRIVATO</span>' : ""}
+          ${l.suspect ? '<span class="badge-sus">€/stanza?</span>' : ""}
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-price-row">
+          <div class="card-price">${fmtEur(l.price)}${delta}</div>
+          <div class="actions">
+            <button class="likebtn${l.liked ? " on" : ""}${!l.liked && (l.liked_by || []).length ? " other" : ""}"
+                    data-id="${l.id}" data-liked="${l.liked ? 1 : 0}"
+                    title="${l.liked ? "togli dai tuoi preferiti" : "aggiungi ai tuoi preferiti"}">${l.liked ? "♥" : "♡"}</button>
+            <button class="hidebtn" data-id="${l.id}" data-hidden="${l.hidden ? 1 : 0}"
+                    title="${l.hidden ? "rimetti tra i risultati" : "nascondi"}">${l.hidden ? "↩" : "✕"}</button>
+          </div>
+        </div>
+        <h3 class="card-title"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || "annuncio " + l.id)}</a></h3>
+        <div class="card-zone">${esc([l.macrozone, l.microzone].filter(Boolean).join(" · "))}${heartedBy(l)}</div>
+        <div class="card-specs">
+          <span>📏 ${l.surface_m2 ? l.surface_m2 + " m²" : "—"}</span>
+          <span>🚪 ${l.rooms ? l.rooms + " loc." : "—"}</span>
+          <span>🪜 ${l.floor != null && l.floor !== "" ? "P. " + l.floor : "—"}</span>
+          <span>€/m²: ${l.ppm2 ?? "—"}</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <span>${l.is_active ? l.days_on_market + " gg fa" : "rimosso"}</span>
+        <span>${esc(l.agency || "Privato")}</span>
+      </div>
+    </div>`;
+  }).join("");
+  bindActionButtons();
+}
+
+function bindActionButtons() {
   document.querySelectorAll(".hidebtn").forEach(b =>
     b.onclick = () => toggleHidden(+b.dataset.id, b.dataset.hidden === "0"));
   document.querySelectorAll(".likebtn").forEach(b =>
     b.onclick = () => toggleLiked(+b.dataset.id, b.dataset.liked === "0"));
-  const btn = document.getElementById("moreBtn");
-  btn.hidden = state.filtered.length <= state.shown;
-  btn.textContent = `Mostra altri (${state.filtered.length - state.shown} rimanenti)`;
+}
+
+function renderMap() {
+  if (!mapInstance) {
+    mapInstance = L.map("mapView").setView([45.0703, 7.6869], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(mapInstance);
+    mapMarkersGroup = L.layerGroup().addTo(mapInstance);
+  }
+  mapInstance.invalidateSize();
+  mapMarkersGroup.clearLayers();
+
+  const valid = state.filtered.filter(l => l.latitude && l.longitude);
+  const bounds = [];
+
+  valid.forEach(l => {
+    const lat = l.latitude, lng = l.longitude;
+    bounds.push([lat, lng]);
+
+    const isDrop = l.price_delta < 0;
+    const isNew = l.days_on_market <= 2 && l.is_active;
+    const isHeart = l.liked || (l.liked_by || []).length > 0;
+    let bg = "#2a78d6";
+    if (isHeart) bg = "#d03b3b";
+    else if (isDrop) bg = "#008a00";
+    else if (isNew) bg = "#e67e22";
+
+    const priceText = l.price ? "€" + l.price : "€?";
+    const icon = L.divIcon({
+      className: "map-price-marker",
+      html: `<div style="background:${bg};color:#fff;font-weight:700;font-size:11px;padding:3px 7px;border-radius:12px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);white-space:nowrap;cursor:pointer;">${priceText}</div>`,
+      iconSize: [50, 22],
+      iconAnchor: [25, 11]
+    });
+
+    const marker = L.marker([lat, lng], { icon });
+    const isPriv = !l.agency || l.agency.toLowerCase().includes("privato");
+    const delta = l.price_delta < 0 ? ` <span class="drop">▼ ${fmtEur(-l.price_delta)}</span>` : "";
+
+    const popupHtml = `
+      <div style="min-width:210px;max-width:260px;">
+        ${l.photo_url ? `<img class="map-thumb" src="${esc(l.photo_url)}" alt="">` : ""}
+        <div class="map-price">${fmtEur(l.price)}${delta}</div>
+        <div class="map-title"><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || "annuncio " + l.id)}</a></div>
+        <div class="map-details">
+          ${esc([l.macrozone, l.microzone].filter(Boolean).join(" · "))}<br>
+          ${l.surface_m2 ? l.surface_m2 + " m²" : ""} ${l.rooms ? "· " + l.rooms + " loc." : ""} ${isPriv ? "· <b>Privato</b>" : ""}
+        </div>
+        <div class="map-actions">
+          <button class="likebtn${l.liked ? " on" : ""}" data-id="${l.id}" data-liked="${l.liked ? 1 : 0}">${l.liked ? "♥ Preferito" : "♡ Preferito"}</button>
+          <button class="hidebtn" data-id="${l.id}" data-hidden="${l.hidden ? 1 : 0}">${l.hidden ? "↩ Ripristina" : "✕ Nascondi"}</button>
+        </div>
+      </div>
+    `;
+    marker.bindPopup(popupHtml);
+    marker.on("popupopen", () => bindActionButtons());
+    mapMarkersGroup.addLayer(marker);
+  });
+
+  if (bounds.length > 0) {
+    mapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+  }
 }
 
 async function toggleHidden(id, hide) {
@@ -386,8 +663,6 @@ async function toggleLiked(id, like) {
   const l = state.listings.find(x => x.id === id);
   if (l) {
     l.liked = like ? 1 : 0;
-    // Take the full list back from the server: it still holds the other
-    // person's heart, which this toggle must not wipe from the row.
     l.liked_by = data.liked_by || [];
   }
   applyFilters();
@@ -404,13 +679,92 @@ function showTip(e, html) {
 }
 function hideTip() { tip.style.display = "none"; }
 
+let pollTimer = null;
+function pollScrapeStatus() {
+  const btn = document.getElementById("btnScrape");
+  const txt = document.getElementById("scrapeBtnText");
+  btn.disabled = true;
+  btn.classList.add("spinning");
+  txt.textContent = "Aggiornamento in corso…";
+
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const over = await fetch(BASE + "api/overview").then(r => r.json());
+      if (!over.is_scraping) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        btn.disabled = false;
+        btn.classList.remove("spinning");
+        txt.textContent = "Aggiorna adesso";
+        await load();
+      }
+    } catch (e) {}
+  }, 4000);
+}
+
+async function triggerScrape() {
+  const btn = document.getElementById("btnScrape");
+  const txt = document.getElementById("scrapeBtnText");
+  btn.disabled = true;
+  btn.classList.add("spinning");
+  txt.textContent = "Avvio in corso…";
+
+  try {
+    const res = await fetch(BASE + "api/scrape-now", { method: "POST" });
+    const data = await res.json();
+    if (!res.ok && res.status !== 409) {
+      alert(data.error || "Errore durante l'avvio dello scrape");
+      btn.disabled = false;
+      btn.classList.remove("spinning");
+      txt.textContent = "Aggiorna adesso";
+      return;
+    }
+  } catch (e) {
+    alert("Errore di connessione col server");
+    btn.disabled = false;
+    btn.classList.remove("spinning");
+    txt.textContent = "Aggiorna adesso";
+    return;
+  }
+  pollScrapeStatus();
+}
+
+function resetFilters() {
+  document.getElementById("fMaxPrice").value = "";
+  document.getElementById("fMinPrice").value = "";
+  document.getElementById("fMinSurface").value = "";
+  document.getElementById("fRooms").value = "";
+  document.getElementById("fZone").value = "";
+  document.getElementById("fNew").value = "";
+  document.getElementById("fText").value = "";
+  document.getElementById("fPrivate").checked = false;
+  document.getElementById("fDrops").checked = false;
+  document.getElementById("fInactive").checked = false;
+  document.getElementById("fHidden").checked = false;
+  document.getElementById("fLiked").checked = false;
+  document.getElementById("fSuspect").checked = true;
+  load();
+}
+
+document.getElementById("btnScrape").onclick = triggerScrape;
+document.getElementById("btnReset").onclick = resetFilters;
+document.getElementById("tabTable").onclick = () => setView("table");
+document.getElementById("tabCards").onclick = () => setView("cards");
+document.getElementById("tabMap").onclick = () => setView("map");
+
 ["fMaxPrice", "fMinPrice", "fMinSurface", "fRooms", "fZone", "fNew", "fText"].forEach(id =>
   document.getElementById(id).addEventListener("input", applyFilters));
-document.getElementById("fInactive").addEventListener("change", load);
-document.getElementById("fHidden").addEventListener("change", load);
-document.getElementById("fSuspect").addEventListener("change", applyFilters);
-document.getElementById("fLiked").addEventListener("change", load);
-document.getElementById("moreBtn").onclick = () => { state.shown += 200; renderRows(); };
+["fPrivate", "fDrops", "fSuspect"].forEach(id =>
+  document.getElementById(id).addEventListener("change", applyFilters));
+["fInactive", "fHidden", "fLiked"].forEach(id =>
+  document.getElementById(id).addEventListener("change", load));
+
+document.getElementById("moreBtn").onclick = () => {
+  state.shown += 100;
+  if (state.view === "table") renderRows();
+  else if (state.view === "cards") renderCards();
+};
 
 load();
 </script>
