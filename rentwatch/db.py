@@ -74,6 +74,17 @@ CREATE TABLE IF NOT EXISTS notify_queue (
     payload TEXT,
     PRIMARY KEY (listing_id, kind)
 );
+
+-- Sent Telegram messages per listing, so discarding a listing (from Telegram
+-- or the dashboard) can delete or cross out the message across all recipients.
+CREATE TABLE IF NOT EXISTS telegram_messages (
+    listing_id INTEGER NOT NULL,
+    chat_id TEXT NOT NULL,
+    message_id INTEGER NOT NULL,
+    sent_at TEXT NOT NULL,
+    PRIMARY KEY (listing_id, chat_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tg_messages_listing ON telegram_messages(listing_id);
 """
 
 LISTING_COLUMNS = [
@@ -105,6 +116,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE listings ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_listings_active_hidden ON listings(is_active, hidden, first_seen DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_price_history_time ON price_history(listing_id, observed_at)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS telegram_messages (
+            listing_id INTEGER NOT NULL,
+            chat_id TEXT NOT NULL,
+            message_id INTEGER NOT NULL,
+            sent_at TEXT NOT NULL,
+            PRIMARY KEY (listing_id, chat_id, message_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tg_messages_listing ON telegram_messages(listing_id)")
     conn.commit()
 
 
@@ -312,6 +333,27 @@ def drain_notifications(conn: sqlite3.Connection, limit: int = 50) -> list[dict]
 
 def queue_size(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) c FROM notify_queue").fetchone()["c"]
+
+
+def record_telegram_message(conn: sqlite3.Connection, listing_id: int,
+                            chat_id: str | int, message_id: int) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO telegram_messages (listing_id, chat_id, message_id, sent_at)"
+        " VALUES (?, ?, ?, ?)",
+        (listing_id, str(chat_id), message_id, now_iso()),
+    )
+
+
+def get_telegram_messages(conn: sqlite3.Connection, listing_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT chat_id, message_id FROM telegram_messages WHERE listing_id = ?",
+        (listing_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_telegram_messages(conn: sqlite3.Connection, listing_id: int) -> None:
+    conn.execute("DELETE FROM telegram_messages WHERE listing_id = ?", (listing_id,))
 
 
 def start_run(conn: sqlite3.Connection) -> int:

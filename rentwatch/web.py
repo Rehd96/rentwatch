@@ -298,6 +298,8 @@ def create_app(cfg: dict) -> FastAPI:
         try:
             if not db.set_hidden(conn, listing_id, value):
                 return JSONResponse(status_code=404, content={"error": "unknown listing"})
+            if value:
+                notify.delete_listing_messages(conn, cfg.get("telegram", {}), listing_id)
             return {"id": listing_id, "hidden": value}
         finally:
             conn.close()

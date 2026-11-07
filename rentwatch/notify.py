@@ -90,23 +90,20 @@ def edit_message_text(token: str, chat_id: str, message_id: int, text: str,
     return ok
 
 
-def send_message(cfg: dict, text: str, chat_id: str | None = None,
-                 preview: bool = True, reply_markup: dict | None = None) -> bool:
-    """Send to one chat, or to every recipient when chat_id is not given.
-
-    True if it reached at least one person: one blocked or deleted chat should
-    not report the whole notification as failed for everybody else.
-    """
+def send_message_get_deliveries(cfg: dict, text: str, chat_id: str | None = None,
+                                preview: bool = True,
+                                reply_markup: dict | None = None) -> list[tuple[str, int]]:
+    """Send to one chat or every recipient, returning [(chat_id, message_id), ...] for successful sends."""
     if not cfg.get("bot_token"):
         log.warning("telegram: no bot_token")
-        return False
+        return []
 
     targets = [str(chat_id)] if chat_id else chat_ids(cfg)
     if not targets:
         log.warning("telegram: no recipients configured")
-        return False
+        return []
 
-    delivered = 0
+    delivered: list[tuple[str, int]] = []
     for target in targets:
         payload = {
             "chat_id": target,
@@ -115,16 +112,64 @@ def send_message(cfg: dict, text: str, chat_id: str | None = None,
         }
         if reply_markup:
             payload["reply_markup"] = reply_markup
-        ok, error = request(cfg["bot_token"], "sendMessage", payload)
-        if not ok and "link_preview_options" in str(error):
+        ok, result_or_err = request(cfg["bot_token"], "sendMessage", payload)
+        if not ok and "link_preview_options" in str(result_or_err):
             payload.pop("link_preview_options", None)
             payload["disable_web_page_preview"] = not preview
-            ok, error = request(cfg["bot_token"], "sendMessage", payload)
-        if ok:
-            delivered += 1
+            ok, result_or_err = request(cfg["bot_token"], "sendMessage", payload)
+        if ok and isinstance(result_or_err, dict) and "message_id" in result_or_err:
+            delivered.append((target, result_or_err["message_id"]))
+        elif ok:
+            delivered.append((target, 0))
         else:
-            log.warning("telegram: delivery to %s failed: %s", target, error)
-    return delivered > 0
+            log.warning("telegram: delivery to %s failed: %s", target, result_or_err)
+    return delivered
+
+
+def send_message(cfg: dict, text: str, chat_id: str | None = None,
+                 preview: bool = True, reply_markup: dict | None = None) -> bool:
+    """Send to one chat, or to every recipient when chat_id is not given.
+
+    True if it reached at least one person: one blocked or deleted chat should
+    not report the whole notification as failed for everybody else.
+    """
+    return len(send_message_get_deliveries(cfg, text, chat_id=chat_id, preview=preview, reply_markup=reply_markup)) > 0
+
+
+def delete_listing_messages(conn, cfg: dict, listing_id: int,
+                            current_chat_id: str | None = None,
+                            current_message_id: int | None = None) -> int:
+    """Delete or strike out all Telegram messages across all recipient chats for a listing.
+
+    Called when an announcement is discarded (hidden=1) from either Telegram or the website dashboard.
+    """
+    token = cfg.get("bot_token")
+    if not token:
+        return 0
+
+    tracked = db.get_telegram_messages(conn, listing_id)
+    targets = {(str(r["chat_id"]), int(r["message_id"])) for r in tracked if r.get("message_id")}
+    if current_chat_id and current_message_id:
+        targets.add((str(current_chat_id), int(current_message_id)))
+
+    if not targets:
+        return 0
+
+    listing = db.get_listing(conn, listing_id)
+    title = (listing or {}).get("title") or f"Annuncio {listing_id}"
+
+    deleted_count = 0
+    for c_id, m_id in targets:
+        ok = call(token, "deleteMessage", {"chat_id": c_id, "message_id": m_id})
+        if ok:
+            deleted_count += 1
+        else:
+            # If delete fails (e.g. message > 48h), edit text so other users know it's discarded
+            edit_message_text(token, c_id, m_id, f"✕ Annuncio scartato:\n{title}", reply_markup=None)
+
+    db.delete_telegram_messages(conn, listing_id)
+    conn.commit()
+    return deleted_count
 
 
 def listing_keyboard(listing_id: int, liked: bool = False, hidden: bool = False) -> dict:
@@ -351,8 +396,14 @@ def notify(conn, cfg: dict, new_listings: list[dict],
         if hearts:
             text = f"♥ {' + '.join(hearts)}\n{text}"
         keyboard = listing_keyboard(listing_id, liked=bool(hearts))
-        if send_message(cfg, text, reply_markup=keyboard):
+        deliveries = send_message_get_deliveries(cfg, text, reply_markup=keyboard)
+        if deliveries:
             sent += 1
+            if conn:
+                for target_chat, msg_id in deliveries:
+                    if msg_id:
+                        db.record_telegram_message(conn, listing_id, target_chat, msg_id)
+                conn.commit()
 
     if len(pending) > cap:
         send_message(cfg, f"… e altri {len(pending) - cap} annunci. "

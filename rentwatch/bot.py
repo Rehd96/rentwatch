@@ -352,12 +352,8 @@ def _handle_callback(cfg: dict, conn, cq: dict, allowed: set[str]) -> None:
     db.set_hidden(conn, listing_id, True)
     answer["text"] = "✕ Annuncio scartato"
     notify.call(token, "answerCallbackQuery", answer)
-    if message_id:
-        ok = notify.call(token, "deleteMessage", {"chat_id": chat_id, "message_id": message_id})
-        if not ok:
-            title = listing.get("title") or f"Annuncio {listing_id}"
-            notify.edit_message_text(token, chat_id, message_id,
-                                     f"✕ Annuncio scartato:\n{title}", reply_markup=None)
+    notify.delete_listing_messages(conn, cfg.get("telegram", {}), listing_id,
+                                   current_chat_id=chat_id, current_message_id=message_id)
 
 
 def handle(cfg: dict, conn, text: str, chat_id: str | None = None):
@@ -453,8 +449,28 @@ def run(cfg: dict) -> int:
                     for item in reply:
                         if isinstance(item, tuple):
                             msg_text, kbd = item
-                            notify.send_message(live["telegram"], msg_text, chat_id=chat_id,
-                                                preview=False, reply_markup=kbd)
+                            deliveries = notify.send_message_get_deliveries(
+                                live["telegram"], msg_text, chat_id=chat_id,
+                                preview=False, reply_markup=kbd)
+                            if deliveries and kbd and "inline_keyboard" in kbd:
+                                lid = None
+                                for row in kbd.get("inline_keyboard", []):
+                                    for btn in row:
+                                        cb = btn.get("callback_data", "")
+                                        if cb.startswith("hide:"):
+                                            try:
+                                                lid = int(cb.split(":")[1])
+                                            except ValueError:
+                                                pass
+                                if lid:
+                                    conn = db.connect(live["db_path"])
+                                    try:
+                                        for target_chat, msg_id in deliveries:
+                                            if msg_id:
+                                                db.record_telegram_message(conn, lid, target_chat, msg_id)
+                                        conn.commit()
+                                    finally:
+                                        conn.close()
                         else:
                             notify.send_message(live["telegram"], str(item), chat_id=chat_id,
                                                 preview=False)

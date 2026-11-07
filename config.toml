@@ -75,7 +75,7 @@ template = "🏠 {title}\n💶 {price} · {surface}{ppm2}\n📍 {zone}\n{url}"
 # Which listings are worth a message. Separate from the search below: the
 # dashboard keeps showing everything, the phone only buzzes for these.
 price_min = 0
-price_max = 0            # 0 = no limit
+price_max = 800            # 0 = no limit, e.g. 800
 surface_min = 0
 rooms_min = 0
 zones = []               # macrozone names; empty = all
@@ -90,10 +90,10 @@ skip_suspect = true      # drop the per-room "student price" listings
 #   idMZona[]                      macrozone ids (repeatable)
 # Location defaults to Torino city; override via [searches.params] if needed.
 [[searches]]
-name = "Torino - affitti fino a 1000€, min 40 m²"
+name = "Torino - affitti fino a 800€, min 40 m²"
 path = "/affitto-case/torino/"
 
 [searches.params]
-prezzoMassimo = 1000
+prezzoMassimo = 800
 superficieMinima = 40
 # localiMinimo = 2
