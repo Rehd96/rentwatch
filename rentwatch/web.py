@@ -20,7 +20,7 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from . import auth, db, notify
+from . import __version__, auth, db, notify
 from .config import PROJECT_ROOT
 from .settings_store import save_config
 
@@ -33,7 +33,9 @@ PUBLIC_PATHS = {"/login", "/healthz"}
 
 
 def _connect(db_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=15.0)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -48,7 +50,8 @@ def _page(name: str, base: str, user: str = "") -> HTMLResponse:
     at the domain root locally and under /case/ on the VPS."""
     page = ((STATIC_DIR / name).read_text(encoding="utf-8")
             .replace("__BASE__", base)
-            .replace("__USER__", html.escape(user)))
+            .replace("__USER__", html.escape(user))
+            .replace("__VERSION__", html.escape(__version__)))
     return HTMLResponse(page)
 
 
@@ -177,7 +180,7 @@ def create_app(cfg: dict) -> FastAPI:
 
     @app.get("/healthz")
     def healthz():
-        return {"ok": True}
+        return {"ok": True, "version": __version__}
 
     # ── pages ────────────────────────────────────────────────────────────────
 
@@ -278,6 +281,7 @@ def create_app(cfg: dict) -> FastAPI:
             lock = Path(db_path).parent / "scrape.lock"
             is_scraping = lock.exists() and (time.time() - lock.stat().st_mtime < 3600)
             return {
+                "version": __version__,
                 "active_count": len(active),
                 "new_7d": new_7d,
                 "median_price": round(statistics.median(prices)) if prices else None,

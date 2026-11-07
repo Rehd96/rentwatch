@@ -4,6 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
+from . import __version__
 from . import db as dbmod
 from . import notify
 from .config import load_config
@@ -284,8 +285,11 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(prog="rentwatch",
                                      description="Monitor immobiliare.it rentals in Torino")
+    parser.add_argument("--version", "-v", action="version", version=f"rentwatch v{__version__}")
     parser.add_argument("--config", help="path to config toml", default=None)
     sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("version", help="mostra la versione di rentwatch")
 
     p_scrape = sub.add_parser("scrape", help="fetch listings and update the database")
     p_scrape.add_argument("--max-pages", type=int, default=None,
@@ -343,6 +347,9 @@ def main() -> int:
     }
     if args.command in commands:
         return commands[args.command](cfg, args)
+    if args.command == "version":
+        print(f"rentwatch v{__version__}")
+        return 0
     if args.command == "report":
         from .report import generate_report
 

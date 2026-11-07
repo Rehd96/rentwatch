@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import db, notify
+from . import __version__, db, notify
 from .config import PROJECT_ROOT, load_config
 from .settings_store import save_config
 
@@ -37,6 +37,7 @@ HELP = """Comandi disponibili:
 /superficie <m2> — imposta la superficie minima
 /silenzia — sospendi temporaneamente le notifiche
 /riattiva — riprendi le notifiche
+/versione — mostra la versione di rentwatch
 /aiuto — mostra questo messaggio"""
 
 
@@ -75,7 +76,7 @@ def _cmd_stato(cfg: dict, conn, args: list[str], chat_id: str | None = None) -> 
     liked = conn.execute(
         "SELECT COUNT(DISTINCT listing_id) c FROM favourites").fetchone()["c"]
 
-    lines = [f"📊 {active} annunci attivi · {liked} preferiti"]
+    lines = [f"📊 rentwatch v{__version__} · {active} annunci attivi · {liked} preferiti"]
     if len(per_user) > 1:
         lines.append("   ♥ " + " · ".join(f"{r['username']} {r['c']}" for r in per_user))
     if run:
@@ -264,6 +265,10 @@ def _set_enabled(cfg: dict, value: bool) -> str:
         else "🔔 Notifiche riattivate."
 
 
+def _cmd_versione(cfg: dict, conn, args: list[str], chat_id: str | None = None) -> str:
+    return f"🏷 rentwatch v{__version__}\nMonitor affitti Torino."
+
+
 COMMANDS = {
     "stato": _cmd_stato,
     "ultimi": _cmd_ultimi,
@@ -279,6 +284,8 @@ COMMANDS = {
     "superficie": _cmd_superficie,
     "silenzia": lambda cfg, conn, args, chat_id=None: _set_enabled(cfg, False),
     "riattiva": lambda cfg, conn, args, chat_id=None: _set_enabled(cfg, True),
+    "versione": _cmd_versione,
+    "version": _cmd_versione,
     "aiuto": lambda cfg, conn, args, chat_id=None: HELP,
     "start": lambda cfg, conn, args, chat_id=None: "Ciao! " + HELP,
     "help": lambda cfg, conn, args, chat_id=None: HELP,
@@ -404,6 +411,7 @@ def run(cfg: dict) -> int:
         {"command": "filtri", "description": "Filtri di notifica attivi"},
         {"command": "silenzia", "description": "Sospendi le notifiche"},
         {"command": "riattiva", "description": "Riattiva le notifiche"},
+        {"command": "versione", "description": "Versione software"},
         {"command": "aiuto", "description": "Guida ai comandi"},
     ]})
 
