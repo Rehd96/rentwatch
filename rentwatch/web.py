@@ -213,7 +213,7 @@ def create_app(cfg: dict) -> FastAPI:
                 conds.append("l.hidden = 0")
             where = f"WHERE {' AND '.join(conds)}" if conds else ""
             rows = conn.execute(f"""
-                SELECT l.id, l.url, l.title, l.typology, l.price, l.surface_m2,
+                SELECT l.id, l.source, l.url, l.title, l.typology, l.price, l.surface_m2,
                        l.rooms, l.bathrooms, l.floor, l.elevator, l.address,
                        l.macrozone, l.microzone, l.latitude, l.longitude,
                        l.agency, l.photo_url, l.first_seen, l.last_seen, l.is_active,

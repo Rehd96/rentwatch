@@ -45,6 +45,7 @@ def parse_listing(item: dict) -> dict | None:
     photo = ((p.get("photo") or {}).get("urls") or {}).get("small")
     return {
         "id": re_["id"],
+        "source": "immobiliare",
         "url": (item.get("seo") or {}).get("url") or f"https://www.immobiliare.it/annunci/{re_['id']}/",
         "title": re_.get("title"),
         "typology": (re_.get("typology") or {}).get("name"),
@@ -171,6 +172,8 @@ class ImmobiliareScraper:
     def iter_listings(self, search: dict, max_pages: int | None = None) -> Iterator[dict]:
         """Yield parsed listings for one configured search, across all pages."""
         params = {str(k): str(v) for k, v in (search.get("params") or {}).items()}
+        # Default to sorting by date so newest listings appear on first pages
+        params.setdefault("criterio", "data")
         if "path" in search:
             params["path"] = search["path"]
         first = self.fetch_page(params, 1)

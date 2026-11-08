@@ -219,7 +219,8 @@ chiunque altro trovi il bot viene ignorato.
 
 | File | Ruolo |
 |---|---|
-| `rentwatch/scraper.py` | client dell'API JSON interna del portale |
+| `rentwatch/scraper.py` | scraper immobiliare.it (SSR `__NEXT_DATA__` via curl_cffi) |
+| `rentwatch/soloaffitti.py` | scraper soloaffitti.it (ricerca + API JSON di dettaglio) |
 | `rentwatch/db.py` | schema SQLite, upsert, storico prezzi, migrazioni |
 | `rentwatch/web.py` + `static/index.html` | dashboard FastAPI + single-page |
 | `rentwatch/report.py` | snapshot Markdown |
@@ -282,10 +283,10 @@ portale, più sospetti di una connessione residenziale.
 
 ## Limiti noti
 
-- Un solo portale (immobiliare.it). Per le sole notifiche multi-portale esiste
-  [flathunter](https://github.com/flathunters/flathunter), che copre anche
-  Idealista e Subito; rentwatch aggiunge storico prezzi, statistiche e
-  dashboard su un portale solo.
+- Portali supportati: immobiliare.it e soloaffitti.it. Per le sole notifiche
+  multi-portale su scala nazionale esiste
+  [flathunter](https://github.com/flathunters/flathunter); rentwatch aggiunge
+  storico prezzi, statistiche per zona e dashboard web integrata.
 - L'API è interna e non documentata: può cambiare senza preavviso. Se succede,
   la struttura dei dati si ritrova in `__NEXT_DATA__` di una pagina di ricerca.
 - Nessuna test suite: la verifica è `scrape --max-pages 2` più un colpo d'occhio

@@ -9,6 +9,7 @@ from . import db as dbmod
 from . import notify
 from .config import load_config
 from .scraper import ImmobiliareScraper, ScrapeError
+from .soloaffitti import SoloAffittiScraper, SoloAffittiScrapeError
 
 log = logging.getLogger("rentwatch")
 
@@ -16,38 +17,67 @@ log = logging.getLogger("rentwatch")
 def cmd_scrape(cfg: dict, args: argparse.Namespace) -> int:
     conn = dbmod.connect(cfg["db_path"])
     first_run = conn.execute("SELECT COUNT(*) c FROM listings").fetchone()["c"] == 0
-    scraper = ImmobiliareScraper(delay=tuple(cfg["request_delay"]))
     run_started = dbmod.now_iso()
     run_id = dbmod.start_run(conn)
     conn.commit()
 
+    source_filter = getattr(args, "source", "all")
     seen = new = changed = 0
     new_listings: list[dict] = []
     price_drops: list[tuple[dict, int]] = []
     delisted: list[dict] = []
     status = "ok"
     try:
-        for search in cfg["searches"]:
-            log.info("scraping search: %s", search.get("name", "?"))
-            for listing in scraper.iter_listings(search, max_pages=args.max_pages):
-                outcome, old_price = dbmod.upsert_listing(conn, listing, dbmod.now_iso())
-                seen += 1
-                if outcome == "new":
-                    new += 1
-                    new_listings.append(listing)
-                elif outcome == "price_changed":
-                    changed += 1
-                    if old_price and listing.get("price") and listing["price"] < old_price:
-                        price_drops.append((listing, old_price))
-                if seen % 100 == 0:
-                    conn.commit()
-        # Only prune when we swept every page, otherwise unseen ≠ gone
-        if args.max_pages is None:
-            delisted = dbmod.hearted_expiring(conn, run_started)
-            deactivated = dbmod.deactivate_unseen(conn, run_started)
-            log.info("deactivated %d listings no longer online (%d hearted)",
-                     deactivated, len(delisted))
-    except ScrapeError as e:
+        # 1. Immobiliare.it
+        if source_filter in ("all", "immobiliare"):
+            im_scraper = ImmobiliareScraper(delay=tuple(cfg["request_delay"]))
+            for search in cfg["searches"]:
+                log.info("scraping search: %s", search.get("name", "?"))
+                for listing in im_scraper.iter_listings(search, max_pages=args.max_pages):
+                    outcome, old_price = dbmod.upsert_listing(conn, listing, dbmod.now_iso())
+                    seen += 1
+                    if outcome == "new":
+                        new += 1
+                        new_listings.append(listing)
+                    elif outcome == "price_changed":
+                        changed += 1
+                        if old_price and listing.get("price") and listing["price"] < old_price:
+                            price_drops.append((listing, old_price))
+                    if seen % 100 == 0:
+                        conn.commit()
+            if args.max_pages is None:
+                exp = dbmod.hearted_expiring(conn, run_started, source="immobiliare")
+                delisted.extend(exp)
+                deactivated = dbmod.deactivate_unseen(conn, run_started, source="immobiliare")
+                log.info("deactivated %d immobiliare listings no longer online (%d hearted)",
+                         deactivated, len(exp))
+
+        # 2. SoloAffitti.it
+        if source_filter in ("all", "soloaffitti"):
+            sa_cfg = cfg.get("soloaffitti", {})
+            if sa_cfg.get("enabled", True):
+                log.info("scraping SoloAffitti: %s", sa_cfg.get("city_name", "Torino"))
+                sa_scraper = SoloAffittiScraper(delay=tuple(cfg["request_delay"]))
+                for listing in sa_scraper.iter_listings(sa_cfg, max_pages=args.max_pages):
+                    outcome, old_price = dbmod.upsert_listing(conn, listing, dbmod.now_iso())
+                    seen += 1
+                    if outcome == "new":
+                        new += 1
+                        new_listings.append(listing)
+                    elif outcome == "price_changed":
+                        changed += 1
+                        if old_price and listing.get("price") and listing["price"] < old_price:
+                            price_drops.append((listing, old_price))
+                    if seen % 50 == 0:
+                        conn.commit()
+                if args.max_pages is None:
+                    exp = dbmod.hearted_expiring(conn, run_started, source="soloaffitti")
+                    delisted.extend(exp)
+                    deactivated = dbmod.deactivate_unseen(conn, run_started, source="soloaffitti")
+                    log.info("deactivated %d soloaffitti listings no longer online (%d hearted)",
+                             deactivated, len(exp))
+
+    except (ScrapeError, SoloAffittiScrapeError) as e:
         status = f"error: {e}"
         log.error("scrape aborted: %s", e)
     finally:
@@ -284,7 +314,7 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="rentwatch",
-                                     description="Monitor immobiliare.it rentals in Torino")
+                                     description="Monitor immobiliare.it and soloaffitti.it rentals in Torino")
     parser.add_argument("--version", "-v", action="version", version=f"rentwatch v{__version__}")
     parser.add_argument("--config", help="path to config toml", default=None)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -292,8 +322,14 @@ def main() -> int:
     sub.add_parser("version", help="mostra la versione di rentwatch")
 
     p_scrape = sub.add_parser("scrape", help="fetch listings and update the database")
+    p_scrape.add_argument("--source", choices=["all", "immobiliare", "soloaffitti"], default="all",
+                          help="which source(s) to scrape (default: all)")
     p_scrape.add_argument("--max-pages", type=int, default=None,
                           help="limit pages per search (for testing; skips deactivation)")
+
+    p_sa = sub.add_parser("scrape-soloaffitti", help="scrape SoloAffitti listings directly")
+    p_sa.add_argument("--max-pages", type=int, default=None,
+                      help="limit pages (for testing; skips deactivation)")
 
     p_serve = sub.add_parser("serve", help="run the dashboard web server")
     p_serve.add_argument("--host", default="127.0.0.1")
@@ -345,6 +381,9 @@ def main() -> int:
         "telegram-remove-chat": cmd_telegram_remove_chat,
         "bot": cmd_bot,
     }
+    if args.command == "scrape-soloaffitti":
+        args.source = "soloaffitti"
+        return cmd_scrape(cfg, args)
     if args.command in commands:
         return commands[args.command](cfg, args)
     if args.command == "version":

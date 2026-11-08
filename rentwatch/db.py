@@ -88,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_tg_messages_listing ON telegram_messages(listing_
 """
 
 LISTING_COLUMNS = [
-    "url", "title", "typology", "price", "surface_m2", "rooms", "bathrooms",
+    "source", "url", "title", "typology", "price", "surface_m2", "rooms", "bathrooms",
     "floor", "elevator", "address", "macrozone", "microzone", "latitude",
     "longitude", "agency", "photo_url", "description",
     "is_new_construction", "luxury",
@@ -113,6 +113,8 @@ def connect(db_path: str) -> sqlite3.Connection:
 def _migrate(conn: sqlite3.Connection) -> None:
     """Additive migrations for DBs created before a column existed."""
     cols = {r[1] for r in conn.execute("PRAGMA table_info(listings)")}
+    if "source" not in cols:
+        conn.execute("ALTER TABLE listings ADD COLUMN source TEXT NOT NULL DEFAULT 'immobiliare'")
     for col in ("hidden", "liked"):
         if col not in cols:
             conn.execute(f"ALTER TABLE listings ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
@@ -187,26 +189,34 @@ def upsert_listing(conn: sqlite3.Connection, listing: dict,
     return "seen", row["price"]
 
 
-def deactivate_unseen(conn: sqlite3.Connection, run_started: str) -> int:
+def deactivate_unseen(conn: sqlite3.Connection, run_started: str,
+                      source: str | None = None) -> int:
     """Mark listings not seen during a completed full run as inactive."""
-    cur = conn.execute(
-        "UPDATE listings SET is_active = 0 WHERE is_active = 1 AND last_seen < ?",
-        (run_started,),
-    )
+    query = "UPDATE listings SET is_active = 0 WHERE is_active = 1 AND last_seen < ?"
+    params: list = [run_started]
+    if source is not None:
+        query += " AND source = ?"
+        params.append(source)
+    cur = conn.execute(query, params)
     return cur.rowcount
 
 
-def hearted_expiring(conn: sqlite3.Connection, run_started: str) -> list[dict]:
+def hearted_expiring(conn: sqlite3.Connection, run_started: str,
+                     source: str | None = None) -> list[dict]:
     """Favourited listings about to be marked inactive by deactivate_unseen().
 
     Read before that call — is_active flips to 0 there and this query would
     otherwise see nothing to report.
     """
-    rows = conn.execute(
+    query = (
         "SELECT l.* FROM listings l WHERE l.is_active = 1 AND l.last_seen < ?"
-        " AND EXISTS (SELECT 1 FROM favourites f WHERE f.listing_id = l.id)",
-        (run_started,),
-    ).fetchall()
+        " AND EXISTS (SELECT 1 FROM favourites f WHERE f.listing_id = l.id)"
+    )
+    params: list = [run_started]
+    if source is not None:
+        query += " AND l.source = ?"
+        params.append(source)
+    rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
 
 

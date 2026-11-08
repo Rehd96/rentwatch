@@ -1,3 +1,3 @@
-"""rentwatch — monitor rental listings on immobiliare.it and browse them locally."""
+"""rentwatch — monitor rental listings on immobiliare.it and soloaffitti.it."""
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

@@ -87,6 +87,7 @@ skip_suspect = true      # drop the per-room "student price" listings
 #   prezzoMinimo / prezzoMassimo   price range (€/month)
 #   superficieMinima               minimum surface (m²)
 #   localiMinimo / localiMassimo   number of rooms ("locali")
+#   criterio                       "data" (più recenti), "prezzo", ecc.
 #   idMZona[]                      macrozone ids (repeatable)
 # Location defaults to Torino city; override via [searches.params] if needed.
 [[searches]]
@@ -96,4 +97,12 @@ path = "/affitto-case/torino/"
 [searches.params]
 prezzoMassimo = 800
 superficieMinima = 40
+criterio = "data"
 # localiMinimo = 2
+
+[soloaffitti]
+enabled = true
+city = "272"
+city_name = "Torino"
+# Opzionale: per filtrare solo un quartiere specifico (es. 63533 per Barriera di Milano)
+# district_ids = "63533"

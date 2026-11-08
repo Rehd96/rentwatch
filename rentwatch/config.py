@@ -58,6 +58,16 @@ DEFAULTS = {
             "skip_suspect": True,    # drop the per-room "student price" listings
         },
     },
+    "soloaffitti": {
+        "enabled": True,
+        "city": "272",
+        "city_name": "Torino",
+        "city_registry_code": "L219",
+        "region_slug": "piemonte",
+        "province_slug": "torino",
+        "city_slug": "torino",
+        "district_ids": "",          # empty for all Torino, or e.g. "63533" for Barriera di Milano
+    },
     "searches": [
         {"name": "Torino", "path": "/affitto-case/torino/", "params": {}},
     ],

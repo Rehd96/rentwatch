@@ -171,6 +171,8 @@
   .badge-priv { display: inline-block; background: color-mix(in srgb, var(--good) 15%, transparent);
                 color: var(--good); font-size: 10.5px; font-weight: 600; border-radius: 5px;
                 padding: 1px 5px; margin-left: 5px; }
+  .badge-sa { display: inline-block; background: #fff3cd; color: #856404; border: 1px solid #ffeeba;
+              font-size: 10.5px; font-weight: 700; border-radius: 5px; padding: 1px 5px; margin-left: 5px; }
   .drop { color: var(--good); font-weight: 600; }
   .rise { color: var(--bad); font-weight: 600; }
   .inactive td { opacity: 0.45; }
@@ -549,7 +551,7 @@ function applyFilters() {
     (!zone || l.macrozone === zone) &&
     (!newDays || l.days_on_market < newDays) &&
     (!text || ((l.title || "") + " " + (l.address || "") + " " + (l.microzone || "") +
-      " " + (l.macrozone || "") + " " + (l.description || "") + " " + (l.agency || ""))
+      " " + (l.macrozone || "") + " " + (l.description || "") + " " + (l.agency || "") + " " + (l.source || ""))
       .toLowerCase().includes(text))
   );
   updateFilterState();
@@ -669,6 +671,7 @@ function renderRows() {
     return `<tr class="${l.is_active ? "" : "inactive"}${l.hidden ? " hiddenrow" : ""}">
       <td>${l.photo_url ? `<img loading="lazy" src="${esc(l.photo_url)}" alt="Foto di ${esc(l.title || "annuncio")}">` : ""}</td>
       <td><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || "annuncio " + l.id)}</a>
+          ${l.source === "soloaffitti" ? '<span class="badge-sa" title="Fonte: SoloAffitti">SOLOAFFITTI</span>' : ""}
           ${isNew ? '<span class="badge-new">NUOVO</span>' : ""}
           ${isPriv ? '<span class="badge-priv" title="Da privato">PRIVATO</span>' : ""}
           ${l.suspect ? '<span class="badge-sus" title="prezzo implausibile per l\'intero alloggio: probabile stanza/posto letto">€/stanza?</span>' : ""}
@@ -705,6 +708,7 @@ function renderCards() {
       <div class="card-img-wrap">
         ${l.photo_url ? `<img loading="lazy" class="card-img" src="${esc(l.photo_url)}" alt="Foto di ${esc(l.title || "annuncio")}">` : `<div class="card-img-empty" aria-hidden="true">🏠</div>`}
         <div class="card-badges">
+          ${l.source === "soloaffitti" ? '<span class="badge-sa" title="Fonte: SoloAffitti">SOLOAFFITTI</span>' : ""}
           ${isNew ? '<span class="badge-new">NUOVO</span>' : ""}
           ${isPriv ? '<span class="badge-priv">PRIVATO</span>' : ""}
           ${l.suspect ? '<span class="badge-sus">€/stanza?</span>' : ""}
